@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button } from '../components/Button';
 import { useUserStore } from '../stores/userStore';
+import { Calendar } from '../components/Calendar';
+import { DailyMealPlan } from '../components/DailyMealPlan';
+import { getWeekDates, getMonthTitle, getNextDay, getPreviousDay, isSameDay } from '../utils/dateUtils';
 
 function UserDropdown() {
   const users = useUserStore((state) => state.users);
@@ -48,8 +50,48 @@ function UserDropdown() {
 }
 
 export const MealPlannerScreen: React.FC = () => {
-  const selectedUser = useUserStore((state) => state.selectedUser);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [weekDates, setWeekDates] = useState(() => getWeekDates(new Date()));
   const insets = useSafeAreaInsets();
+
+  const monthTitle = getMonthTitle(selectedDate);
+
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(date);
+    updateWeekIfNeeded(date);
+  };
+
+  const updateWeekIfNeeded = (date: Date) => {
+    // Check if the selected date is outside current week
+    const isDateInCurrentWeek = weekDates.some(weekDate => 
+      isSameDay(weekDate, date)
+    );
+    
+    if (!isDateInCurrentWeek) {
+      const newWeekDates = getWeekDates(date);
+      setWeekDates(newWeekDates);
+    }
+  };
+
+  const handlePreviousWeek = () => {
+    const newDate = getPreviousDay(weekDates[0]);
+    const newWeekDates = getWeekDates(newDate);
+    setWeekDates(newWeekDates);
+    setSelectedDate(newDate);
+  };
+
+  const handleNextWeek = () => {
+    const newDate = getNextDay(weekDates[6]);
+    const newWeekDates = getWeekDates(newDate);
+    setWeekDates(newWeekDates);
+    setSelectedDate(newDate);
+  };
+
+  // Handle date change from swipe
+  const handleDateChange = (newDate: Date) => {
+    setSelectedDate(newDate);
+    updateWeekIfNeeded(newDate);
+  };
 
   return (
     <View style={styles.container}>
@@ -65,27 +107,21 @@ export const MealPlannerScreen: React.FC = () => {
         </View>
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.placeholder}>
-          <Text style={styles.placeholderText}>
-            🍽️ Calendar view will be here
-          </Text>
-          <Text style={styles.description}>
-            Here you'll be able to:
-            {'\n'}• View weekly calendar
-            {'\n'}• Add meals to specific days
-            {'\n'}• See nutrition overview
-            {'\n'}• Generate meal plans for {selectedUser?.name || 'selected user'}
-          </Text>
-        </View>
+      {/* Calendar */}
+      <Calendar
+        selectedDate={selectedDate}
+        onSelectDate={handleDateSelect}
+        weekDates={weekDates}
+        monthTitle={monthTitle}
+        onPreviousWeek={handlePreviousWeek}
+        onNextWeek={handleNextWeek}
+      />
 
-        <Button
-          title="🎲 Generate This Week"
-          onPress={() => console.log(`Generate meal plan for ${selectedUser?.name}`)}
-          variant="primary"
-          size="large"
-        />
-      </View>
+      {/* Daily Meal Plan */}
+      <DailyMealPlan 
+        selectedDate={selectedDate} 
+        onDateChange={handleDateChange}
+      />
     </View>
   );
 };
@@ -114,48 +150,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    zIndex: 100,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
   },
-  content: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: '#F8F9FA',
-  },
-  placeholder: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  placeholderText: {
-    fontSize: 24,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  description: {
-    fontSize: 16,
-    color: '#666666',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
   dropdown: {
     position: 'relative',
     minWidth: 120,
+    zIndex: 1000,
   },
   dropdownButton: {
     flexDirection: 'row',
@@ -192,8 +197,8 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.15,
     shadowRadius: 4,
-    elevation: 5,
-    zIndex: 1000,
+    elevation: 10,
+    zIndex: 1001,
     minWidth: 150,
   },
   dropdownItem: {
