@@ -72,6 +72,10 @@ export const MealSection: React.FC<MealSectionProps> = ({
     setSearchQuery('');
   };
 
+  // Získání prvního jídla pro zobrazení v collapsed stavu
+  const firstMeal = meals.length > 0 ? meals[0] : null;
+  const remainingMealsCount = meals.length > 1 ? meals.length - 1 : 0;
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -79,6 +83,16 @@ export const MealSection: React.FC<MealSectionProps> = ({
           <Text style={styles.icon}>{getMealIcon()}</Text>
           <Text style={styles.title}>{type}</Text>
         </View>
+        
+        {/* Zobrazení prvního jídla v collapsed stavu */}
+        {firstMeal && !isExpanded && (
+          <View style={styles.mealPreview}>
+            <Text style={styles.mealPreviewText}>{firstMeal.name}</Text>
+            {remainingMealsCount > 0 && (
+              <Text style={styles.mealCount}>+{remainingMealsCount}</Text>
+            )}
+          </View>
+        )}
         
         <View style={styles.headerRight}>
           {isSnack && onRemoveSnack && (
@@ -229,6 +243,29 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333333',
+  },
+  mealPreview: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 15,
+  },
+  mealPreviewText: {
+    fontSize: 14,
+    color: '#666666',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  mealCount: {
+    fontSize: 12,
+    color: '#FFB347',
+    fontWeight: 'bold',
+    marginLeft: 6,
+    backgroundColor: '#FFE4B5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
   headerRight: {
     flexDirection: 'row',

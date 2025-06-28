@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUserStore } from '../stores/userStore';
@@ -53,12 +53,32 @@ export const MealPlannerScreen: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekDates, setWeekDates] = useState(() => getWeekDates(new Date()));
   const insets = useSafeAreaInsets();
+  
+  // Reference pro DailyMealPlan komponentu
+  const dailyMealPlanRef = useRef<any>(null);
 
   const monthTitle = getMonthTitle(selectedDate);
 
   const handleDateSelect = (date: Date) => {
-    setSelectedDate(date);
-    updateWeekIfNeeded(date);
+    const currentDate = selectedDate;
+    const newDate = date;
+    
+    // Pokud je to stejné datum, neděláme nic
+    if (isSameDay(currentDate, newDate)) {
+      return;
+    }
+    
+    // Porovnání dat pro určení směru animace
+    const isGoingToFuture = newDate > currentDate;
+    
+    // Spustíme animaci přes DailyMealPlan komponentu
+    if (dailyMealPlanRef.current && dailyMealPlanRef.current.animateToDate) {
+      dailyMealPlanRef.current.animateToDate(newDate, isGoingToFuture ? 'left' : 'right');
+    } else {
+      // Fallback pokud ref není dostupný
+      setSelectedDate(newDate);
+      updateWeekIfNeeded(newDate);
+    }
   };
 
   const updateWeekIfNeeded = (date: Date) => {
@@ -87,7 +107,7 @@ export const MealPlannerScreen: React.FC = () => {
     setSelectedDate(newDate);
   };
 
-  // Handle date change from swipe
+  // Handle date change from swipe or animation
   const handleDateChange = (newDate: Date) => {
     setSelectedDate(newDate);
     updateWeekIfNeeded(newDate);
@@ -120,6 +140,7 @@ export const MealPlannerScreen: React.FC = () => {
 
       {/* Daily Meal Plan */}
       <DailyMealPlan 
+        ref={dailyMealPlanRef}
         selectedDate={selectedDate} 
         onDateChange={handleDateChange}
       />
