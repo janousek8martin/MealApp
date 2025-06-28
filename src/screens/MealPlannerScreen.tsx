@@ -109,6 +109,7 @@ export const MealPlannerScreen: React.FC = () => {
 
       {/* Calendar */}
       <Calendar
+        key={`${selectedDate.toISOString().split('T')[0]}-${weekDates[0].toISOString().split('T')[0]}`}
         selectedDate={selectedDate}
         onSelectDate={handleDateSelect}
         weekDates={weekDates}

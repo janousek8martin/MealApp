@@ -1,6 +1,6 @@
 // src/components/Calendar.tsx
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Modal } from 'react-native';
 import { isSameDay, isToday } from '../utils/dateUtils';
 
 const windowWidth = Dimensions.get('window').width;
@@ -14,6 +14,121 @@ interface CalendarProps {
   onNextWeek: () => void;
 }
 
+const MonthCalendar: React.FC<{
+  selectedDate: Date;
+  onSelectDate: (date: Date) => void;
+  onClose: () => void;
+}> = ({ selectedDate, onSelectDate, onClose }) => {
+  const [currentMonth, setCurrentMonth] = useState(new Date(selectedDate.getFullYear(), selectedDate.getMonth()));
+
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    
+    // Get first day of week (0 = Sunday, 1 = Monday, etc.)
+    const firstDayOfWeek = (firstDay.getDay() + 6) % 7; // Convert to Monday = 0
+    
+    const days = [];
+    
+    // Add empty cells for days before the first day of month
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      days.push(null);
+    }
+    
+    // Add all days of the month
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(new Date(year, month, i));
+    }
+    
+    return days;
+  };
+
+  const goToPreviousMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
+  };
+
+  const goToNextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
+  };
+
+  const handleDateSelect = (date: Date) => {
+    onSelectDate(date);
+    onClose();
+  };
+
+  const monthName = currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' });
+  const days = getDaysInMonth(currentMonth);
+
+  return (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={true}
+      onRequestClose={onClose}
+    >
+      <View style={styles.monthModalOverlay}>
+        <View style={styles.monthModalContent}>
+          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <Text style={styles.closeText}>✕</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.monthHeader}>
+            <TouchableOpacity onPress={goToPreviousMonth}>
+              <Text style={styles.monthArrow}>‹</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalMonthTitle}>{monthName}</Text>
+            <TouchableOpacity onPress={goToNextMonth}>
+              <Text style={styles.monthArrow}>›</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.weekDaysHeader}>
+            {['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'].map((day, index) => (
+              <Text key={index} style={styles.weekDayText}>{day}</Text>
+            ))}
+          </View>
+
+          <View style={styles.monthGrid}>
+            {days.map((day, index) => {
+              if (!day) {
+                return <View key={index} style={styles.emptyDay} />;
+              }
+
+              const isSelected = isSameDay(selectedDate, day);
+              const isCurrent = isToday(day);
+
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.monthDay}
+                  onPress={() => handleDateSelect(day)}
+                >
+                  <View style={[
+                    styles.monthDayContent,
+                    isSelected && styles.selectedMonthDay,
+                    isCurrent && !isSelected && styles.currentMonthDay,
+                  ]}>
+                    <Text style={[
+                      styles.monthDayText,
+                      isSelected && styles.selectedMonthDayText,
+                      isCurrent && !isSelected && styles.currentMonthDayText,
+                    ]}>
+                      {day.getDate()}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
 export const Calendar: React.FC<CalendarProps> = ({
   selectedDate,
   onSelectDate,
@@ -22,6 +137,7 @@ export const Calendar: React.FC<CalendarProps> = ({
   onPreviousWeek,
   onNextWeek
 }) => {
+  const [showMonthView, setShowMonthView] = useState(false);
   const isSelectedToday = isToday(selectedDate);
 
   const handleTodayPress = () => {
@@ -31,7 +147,10 @@ export const Calendar: React.FC<CalendarProps> = ({
   return (
     <View style={styles.container}>
       <View style={styles.monthTitleRow}>
-        <Text style={styles.monthTitle}>{monthTitle}</Text>
+        <TouchableOpacity style={styles.monthTitleButton} onPress={() => setShowMonthView(true)}>
+          <Text style={styles.monthTitle}>{monthTitle}</Text>
+          <Text style={styles.dropdownArrow}>▼</Text>
+        </TouchableOpacity>
         {!isSelectedToday && (
           <TouchableOpacity style={styles.todayButton} onPress={handleTodayPress}>
             <Text style={styles.todayButtonText}>Today</Text>
@@ -87,6 +206,14 @@ export const Calendar: React.FC<CalendarProps> = ({
           <Text style={styles.arrow}>›</Text>
         </TouchableOpacity>
       </View>
+
+      {showMonthView && (
+        <MonthCalendar
+          selectedDate={selectedDate}
+          onSelectDate={onSelectDate}
+          onClose={() => setShowMonthView(false)}
+        />
+      )}
     </View>
   );
 };
@@ -106,12 +233,21 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     position: 'relative',
   },
+  monthTitleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   monthTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333333',
     textAlign: 'center',
-    flex: 1,
+  },
+  dropdownArrow: {
+    fontSize: 12,
+    color: '#666666',
+    marginLeft: 6,
   },
   todayButton: {
     position: 'absolute',
@@ -121,7 +257,7 @@ const styles = StyleSheet.create({
     borderColor: '#FFB347',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16, // Zaoblené rohy
+    borderRadius: 16,
   },
   todayButtonHighlighted: {
     position: 'absolute',
@@ -129,7 +265,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFB347',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16, // Zaoblené rohy
+    borderRadius: 16,
   },
   todayButtonText: {
     color: '#FFB347',
@@ -167,7 +303,7 @@ const styles = StyleSheet.create({
   },
   dateBox: {
     padding: 8,
-    borderRadius: 16, // Zaoblené rohy pro moderní vzhled
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 60,
@@ -193,5 +329,100 @@ const styles = StyleSheet.create({
   },
   selectedText: {
     color: '#FFFFFF',
+  },
+  // Month calendar styles
+  monthModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  monthModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    width: '90%',
+    maxWidth: 350,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    zIndex: 1,
+  },
+  closeText: {
+    fontSize: 20,
+    color: '#666666',
+  },
+  monthHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    marginTop: 10,
+  },
+  monthArrow: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333333',
+    paddingHorizontal: 15,
+  },
+  modalMonthTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333333',
+  },
+  weekDaysHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 10,
+  },
+  weekDayText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666666',
+    width: 40,
+    textAlign: 'center',
+  },
+  monthGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  emptyDay: {
+    width: '14.28%',
+    height: 40,
+  },
+  monthDay: {
+    width: '14.28%',
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  monthDayContent: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  selectedMonthDay: {
+    backgroundColor: '#FFB347',
+  },
+  currentMonthDay: {
+    borderWidth: 1,
+    borderColor: '#FFB347',
+  },
+  monthDayText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333333',
+  },
+  selectedMonthDayText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  currentMonthDayText: {
+    color: '#FFB347',
+    fontWeight: 'bold',
   },
 });
