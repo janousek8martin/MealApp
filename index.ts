@@ -1,3 +1,4 @@
+// index.ts - Expo entry point
 import { registerRootComponent } from 'expo';
 
 import App from './App';

@@ -54,3 +54,6 @@ export interface Meal {
   servings: number;
   time?: string; // HH:MM format
 }
+
+// Additional types from meal.ts
+export * from './meal';
