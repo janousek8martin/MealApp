@@ -1,13 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
+import { ProfileSettingsScreen } from './ProfileSettingsScreen';
 
 export const SettingsScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
+  const [currentScreen, setCurrentScreen] = useState<'main' | 'profile'>('main');
 
   const handleProfileSetup = () => {
-    console.log('Profile Setup pressed');
+    setCurrentScreen('profile');
+  };
+
+  const handleBackToSettings = () => {
+    setCurrentScreen('main');
   };
 
   const handleNutritionGoals = () => {
@@ -30,6 +36,11 @@ export const SettingsScreen: React.FC = () => {
     console.log('About pressed');
   };
 
+  // Show ProfileSettingsScreen if selected
+  if (currentScreen === 'profile') {
+    return <ProfileSettingsScreen onBack={handleBackToSettings} />;
+  }
+
   return (
     <View style={styles.container}>
       {/* Status bar separator */}
@@ -40,7 +51,7 @@ export const SettingsScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>Profile & Health</Text>
           
           <Button
-            title="👤 Profile Setup"
+            title="👤 Profile & Nutrition"
             onPress={handleProfileSetup}
             variant="secondary"
             size="large"
@@ -48,8 +59,8 @@ export const SettingsScreen: React.FC = () => {
           />
           
           <Button
-            title="🎯 Nutrition Goals"
-            onPress={handleNutritionGoals}
+            title="🍽️ Meal Preferences"
+            onPress={handleMealPreferences}
             variant="secondary"
             size="large"
             style={styles.settingButton}
@@ -57,11 +68,19 @@ export const SettingsScreen: React.FC = () => {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Preferences</Text>
+          <Text style={styles.sectionTitle}>Data & Support</Text>
           
           <Button
-            title="🍽️ Meal Preferences"
-            onPress={handleMealPreferences}
+            title="🌐 Language"
+            onPress={handleUnitsSettings}
+            variant="secondary"
+            size="large"
+            style={styles.settingButton}
+          />
+          
+          <Button
+            title="⚙️ Misc"
+            onPress={handleUnitsSettings}
             variant="secondary"
             size="large"
             style={styles.settingButton}
@@ -74,10 +93,6 @@ export const SettingsScreen: React.FC = () => {
             size="large"
             style={styles.settingButton}
           />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Data & Support</Text>
           
           <Button
             title="💾 Backup & Sync"
@@ -94,13 +109,6 @@ export const SettingsScreen: React.FC = () => {
             size="large"
             style={styles.settingButton}
           />
-        </View>
-
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>💡 Getting Started</Text>
-          <Text style={styles.infoText}>
-            Complete your profile setup to get personalized meal recommendations and accurate nutrition tracking.
-          </Text>
         </View>
       </ScrollView>
     </View>
@@ -131,24 +139,5 @@ const styles = StyleSheet.create({
   },
   settingButton: {
     marginBottom: 12,
-  },
-  infoCard: {
-    backgroundColor: '#E3F2FD',
-    borderRadius: 12,
-    padding: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#2196F3',
-    marginTop: 20,
-  },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1565C0',
-    marginBottom: 8,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#1976D2',
-    lineHeight: 20,
   },
 });

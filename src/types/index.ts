@@ -2,12 +2,16 @@
 export interface User {
   id: string;
   name: string;
-  age: number;
-  gender: 'Male' | 'Female';
-  height: number; // cm
-  weight: number; // kg
-  bodyFat: number; // %
-  activityLevel: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
+  age?: string;
+  gender?: 'Male' | 'Female';
+  height?: string; // cm value when using cm
+  heightUnit?: 'cm' | 'ft'; // unit selection
+  heightFeet?: string; // feet value when using ft/in
+  heightInches?: string; // inches value when using ft/in
+  weight?: string; // weight value
+  weightUnit?: 'kg' | 'lbs'; // weight unit selection
+  bodyFat?: number; // %
+  activityLevel?: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 }
 
 export interface Recipe {
