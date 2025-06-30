@@ -1,5 +1,6 @@
 // src/stores/recipeStore.ts
 import { create } from 'zustand';
+import { defaultRecipes, defaultFoods } from '../data/recipesFoodsDatabase';
 
 export interface Recipe {
   id: string;
@@ -37,7 +38,7 @@ export interface Ingredient {
 }
 
 interface RecipeStore {
-  // Data
+  // Data - now using external database
   recipes: Recipe[];
   foods: Food[];
   
@@ -77,104 +78,10 @@ interface RecipeStore {
   getFilteredFoods: () => Food[];
 }
 
-// Demo data
-const demoRecipes: Recipe[] = [
-  {
-    id: '1',
-    name: 'Scrambled Eggs',
-    categories: ['Breakfast'],
-    foodTypes: ['Vegetarian'],
-    allergens: ['Eggs', 'Dairy'],
-    prepTime: '5',
-    cookTime: '10',
-    protein: '15',
-    carbs: '2',
-    fat: '14',
-    calories: '200',
-    instructions: 'Beat eggs, cook in pan with butter.',
-    ingredients: [
-      { id: '1', name: 'Eggs', amount: '3', unit: 'pieces' },
-      { id: '2', name: 'Butter', amount: '1', unit: 'tbsp' }
-    ],
-    image: 'https://via.placeholder.com/150'
-  },
-  {
-    id: '2',
-    name: 'Chicken Salad',
-    categories: ['Lunch'],
-    foodTypes: ['Chicken'],
-    allergens: [],
-    prepTime: '15',
-    cookTime: '0',
-    protein: '30',
-    carbs: '15',
-    fat: '20',
-    calories: '350',
-    instructions: 'Mix chicken with vegetables and dressing.',
-    ingredients: [
-      { id: '1', name: 'Chicken breast', amount: '200', unit: 'g' },
-      { id: '2', name: 'Lettuce', amount: '100', unit: 'g' }
-    ],
-    image: 'https://via.placeholder.com/150'
-  },
-  {
-    id: '3',
-    name: 'Beef Stir Fry',
-    categories: ['Dinner'],
-    foodTypes: ['Beef'],
-    allergens: ['Soy'],
-    prepTime: '20',
-    cookTime: '15',
-    protein: '35',
-    carbs: '25',
-    fat: '18',
-    calories: '380',
-    instructions: 'Stir fry beef with vegetables in wok.',
-    ingredients: [
-      { id: '1', name: 'Beef strips', amount: '250', unit: 'g' },
-      { id: '2', name: 'Mixed vegetables', amount: '200', unit: 'g' }
-    ],
-    image: 'https://via.placeholder.com/150'
-  }
-];
-
-const demoFoods: Food[] = [
-  {
-    id: '1',
-    name: 'Apple',
-    category: 'Fruit',
-    protein: '0.3',
-    carbs: '21',
-    fat: '0.2',
-    calories: '80',
-    image: 'https://via.placeholder.com/150'
-  },
-  {
-    id: '2',
-    name: 'Banana',
-    category: 'Fruit',
-    protein: '1.1',
-    carbs: '27',
-    fat: '0.3',
-    calories: '105',
-    image: 'https://via.placeholder.com/150'
-  },
-  {
-    id: '3',
-    name: 'Chicken Breast',
-    category: 'Meat',
-    protein: '31',
-    carbs: '0',
-    fat: '3.6',
-    calories: '165',
-    image: 'https://via.placeholder.com/150'
-  }
-];
-
 export const useRecipeStore = create<RecipeStore>((set, get) => ({
-  // Initial data
-  recipes: demoRecipes,
-  foods: demoFoods,
+  // Initial data from external database
+  recipes: defaultRecipes,
+  foods: defaultFoods,
   
   // Initial filters
   searchQuery: '',

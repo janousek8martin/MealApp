@@ -6,13 +6,19 @@ import { useRecipeStore, Recipe, Food } from '../stores/recipeStore';
 import { RecipeCard } from '../components/RecipeCard';
 import { FoodCard } from '../components/FoodCard';
 import { FilterModal } from '../components/FilterModal';
+import RecipeDetailScreen from './RecipeDetailScreen';
+import FoodDetailScreen from './FoodDetailScreen';
 
 type ActiveTab = 'Recipes' | 'Foods';
+type ViewMode = 'list' | 'recipeDetail' | 'foodDetail';
 
 export const RecipesScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<ActiveTab>('Recipes');
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [selectedRecipeForDetail, setSelectedRecipeForDetail] = useState<Recipe | null>(null);
+  const [selectedFoodForDetail, setSelectedFoodForDetail] = useState<Food | null>(null);
   
   const {
     searchQuery,
@@ -60,7 +66,6 @@ export const RecipesScreen: React.FC = () => {
         image: 'https://via.placeholder.com/150',
       };
       addRecipe(newRecipe);
-      // TODO: Navigate to recipe details
     } else {
       const newFood: Food = {
         id: Date.now().toString(),
@@ -72,12 +77,13 @@ export const RecipesScreen: React.FC = () => {
         image: 'https://via.placeholder.com/150',
       };
       addFood(newFood);
-      // TODO: Navigate to food details
     }
   };
 
   const handleDeleteSelected = () => {
     const selectedCount = activeTab === 'Recipes' ? selectedRecipes.length : selectedFoods.length;
+    
+    if (selectedCount === 0) return;
     
     Alert.alert(
       `Delete ${activeTab}`,
@@ -105,8 +111,9 @@ export const RecipesScreen: React.FC = () => {
     if (selectedRecipes.length > 0) {
       toggleRecipeSelection(recipe.id);
     } else {
-      // TODO: Navigate to recipe details
-      console.log('Navigate to recipe details:', recipe.name);
+      // Show recipe detail screen
+      setSelectedRecipeForDetail(recipe);
+      setViewMode('recipeDetail');
     }
   };
 
@@ -114,9 +121,16 @@ export const RecipesScreen: React.FC = () => {
     if (selectedFoods.length > 0) {
       toggleFoodSelection(food.id);
     } else {
-      // TODO: Navigate to food details
-      console.log('Navigate to food details:', food.name);
+      // Show food detail screen
+      setSelectedFoodForDetail(food);
+      setViewMode('foodDetail');
     }
+  };
+
+  const handleBackToList = () => {
+    setViewMode('list');
+    setSelectedRecipeForDetail(null);
+    setSelectedFoodForDetail(null);
   };
 
   const handleTabChange = (tab: ActiveTab) => {
@@ -157,6 +171,26 @@ export const RecipesScreen: React.FC = () => {
     />
   );
 
+  // Show detail screens when in detail mode
+  if (viewMode === 'recipeDetail' && selectedRecipeForDetail) {
+    return (
+      <RecipeDetailScreen
+        recipe={selectedRecipeForDetail}
+        onBack={handleBackToList}
+      />
+    );
+  }
+
+  if (viewMode === 'foodDetail' && selectedFoodForDetail) {
+    return (
+      <FoodDetailScreen
+        food={selectedFoodForDetail}
+        onBack={handleBackToList}
+      />
+    );
+  }
+
+  // Main list view
   return (
     <View style={styles.container}>
       {/* Status bar separator */}
@@ -209,13 +243,6 @@ export const RecipesScreen: React.FC = () => {
       {/* Action Buttons Row */}
       <View style={styles.actionButtonsContainer}>
         <View style={styles.leftActions}>
-          <TouchableOpacity 
-            style={[styles.editButton, { opacity: hasSelections ? 1 : 0.3 }]} 
-            onPress={() => console.log('Edit selected items')}
-            disabled={!hasSelections}
-          >
-            <Text style={styles.editIcon}>✎</Text>
-          </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.deleteButton, { opacity: hasSelections ? 1 : 0.3 }]} 
             onPress={handleDeleteSelected}
@@ -396,10 +423,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
-  centerActions: {
-    flex: 1,
-    alignItems: 'center',
-  },
   clearFiltersButton: {
     backgroundColor: '#FFB347',
     paddingVertical: 8,
@@ -427,20 +450,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     lineHeight: 20,
-    textAlign: 'center',
-  },
-  editButton: {
-    backgroundColor: '#4CAF50',
-    borderRadius: 16,
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  editIcon: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    lineHeight: 16,
     textAlign: 'center',
   },
   deleteButton: {
