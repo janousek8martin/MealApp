@@ -1,8 +1,20 @@
 // src/screens/FoodDetailScreen.tsx
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Image, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Image, Alert, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Food, useRecipeStore } from '../stores/recipeStore';
+
+// Import food categories database with fallback
+let foodCategories: string[];
+try {
+  const { getFoodCategories } = require('../data/recipesFoodsDatabase');
+  foodCategories = getFoodCategories();
+} catch (error) {
+  // Fallback categories
+  foodCategories = [
+    'Fruit', 'Vegetable', 'Meat', 'Fish', 'Dairy', 'Grain', 'Nuts', 'Legumes', 'Herbs & Spices', 'Oils & Fats'
+  ];
+}
 
 interface FoodDetailScreenProps {
   food: Food;
@@ -13,6 +25,8 @@ const FoodDetailScreen: React.FC<FoodDetailScreenProps> = ({ food, onBack }) => 
   const insets = useSafeAreaInsets();
   const [editedFood, setEditedFood] = useState<Food>(food);
   const [isEditing, setIsEditing] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const updateFood = useRecipeStore(state => state.updateFood);
 
   const handleSave = () => {
@@ -30,6 +44,32 @@ const FoodDetailScreen: React.FC<FoodDetailScreenProps> = ({ food, onBack }) => 
     setEditedFood(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleAddImage = () => {
+    // TODO: Implementovat přidání obrázku
+    Alert.alert('Add Image', 'Image selection functionality will be implemented later');
+  };
+
+  const handlePrint = () => {
+    // TODO: Implementovat tisk jídla
+    Alert.alert('Print Food Info', 'Print functionality will be implemented later');
+  };
+
+  const openCategoryModal = () => {
+    const currentCategory = editedFood.category || '';
+    const available = foodCategories.filter(cat => cat !== currentCategory);
+    setAvailableCategories(available);
+    setShowCategoryModal(true);
+  };
+
+  const selectCategory = (category: string) => {
+    updateField('category', category);
+    setShowCategoryModal(false);
+  };
+
+  const removeCategory = () => {
+    updateField('category', '');
+  };
+
   return (
     <View style={styles.container}>
       {/* Status bar separator */}
@@ -40,61 +80,63 @@ const FoodDetailScreen: React.FC<FoodDetailScreenProps> = ({ food, onBack }) => 
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Food Details</Text>
-        <TouchableOpacity 
-          style={styles.editButton} 
-          onPress={isEditing ? handleSave : () => setIsEditing(true)}
-        >
-          <Text style={styles.editText}>{isEditing ? 'Save' : 'Edit'}</Text>
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{editedFood.name}</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.printButton} onPress={handlePrint}>
+            <Text style={styles.printIcon}>🖨️</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.editButton} 
+            onPress={isEditing ? handleSave : () => setIsEditing(true)}
+          >
+            <Text style={styles.editText}>{isEditing ? 'Save' : 'Edit'}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Food Image */}
-        {editedFood.image && editedFood.image !== 'https://via.placeholder.com/150' && (
-          <Image source={{ uri: editedFood.image }} style={styles.image} />
-        )}
-
-        {/* Food Name */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Food Name</Text>
-          {isEditing ? (
-            <TextInput
-              style={styles.input}
-              value={editedFood.name}
-              onChangeText={(text) => updateField('name', text)}
-              placeholder="Food name"
-            />
+        <View style={styles.imageContainer}>
+          {editedFood.image && editedFood.image !== 'https://via.placeholder.com/150' ? (
+            <Image source={{ uri: editedFood.image }} style={styles.image} />
           ) : (
-            <Text style={styles.foodTitle}>{editedFood.name}</Text>
+            <TouchableOpacity style={styles.imagePlaceholder} onPress={handleAddImage}>
+              <Text style={styles.addImageIcon}>📷</Text>
+              <Text style={styles.addImageText}>Add Photo</Text>
+            </TouchableOpacity>
           )}
         </View>
 
         {/* Category */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Category</Text>
-          {isEditing ? (
-            <TextInput
-              style={styles.input}
-              value={editedFood.category || ''}
-              onChangeText={(text) => updateField('category', text)}
-              placeholder="Food category"
-            />
-          ) : (
-            <View style={styles.categoryContainer}>
-              {editedFood.category && (
-                <View style={styles.categoryTag}>
-                  <Text style={styles.categoryText}>{editedFood.category}</Text>
-                </View>
-              )}
-            </View>
-          )}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Category</Text>
+            {isEditing && (
+              <TouchableOpacity style={styles.addCategoryButton} onPress={openCategoryModal}>
+                <Text style={styles.addCategoryText}>+ Add</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <View style={styles.categoryContainer}>
+            {editedFood.category ? (
+              <View style={styles.categoryTag}>
+                <Text style={styles.categoryText}>{editedFood.category}</Text>
+                {isEditing && (
+                  <TouchableOpacity onPress={removeCategory}>
+                    <Text style={styles.removeCategoryText}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <Text style={styles.noCategoryText}>No category assigned</Text>
+            )}
+          </View>
         </View>
 
         {/* Nutrition Info per 100g */}
         <View style={styles.nutritionCard}>
           <Text style={styles.sectionTitle}>Nutrition (per 100g)</Text>
-          <View style={styles.nutritionGrid}>
+          <View style={styles.nutritionRow}>
             <View style={styles.nutritionItem}>
               <Text style={styles.nutritionLabel}>Calories</Text>
               {isEditing ? (
@@ -158,37 +200,7 @@ const FoodDetailScreen: React.FC<FoodDetailScreenProps> = ({ food, onBack }) => 
           </View>
         </View>
 
-        {/* Nutrition Summary */}
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Nutritional Summary</Text>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Total Calories:</Text>
-            <Text style={styles.summaryValue}>{editedFood.calories} kcal</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Macronutrients:</Text>
-            <Text style={styles.summaryValue}>
-              P: {editedFood.protein}g | C: {editedFood.carbs}g | F: {editedFood.fat}g
-            </Text>
-          </View>
-          
-          {/* Calories from macros */}
-          <View style={styles.macroBreakdown}>
-            <Text style={styles.breakdownTitle}>Calorie Breakdown:</Text>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>From Protein:</Text>
-              <Text style={styles.breakdownValue}>{(parseFloat(editedFood.protein) * 4).toFixed(0)} kcal</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>From Carbs:</Text>
-              <Text style={styles.breakdownValue}>{(parseFloat(editedFood.carbs) * 4).toFixed(0)} kcal</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>From Fat:</Text>
-              <Text style={styles.breakdownValue}>{(parseFloat(editedFood.fat) * 9).toFixed(0)} kcal</Text>
-            </View>
-          </View>
-        </View>
+
 
         {isEditing && (
           <View style={styles.editingActions}>
@@ -201,6 +213,36 @@ const FoodDetailScreen: React.FC<FoodDetailScreenProps> = ({ food, onBack }) => 
           </View>
         )}
       </ScrollView>
+
+      {/* Category Selection Modal */}
+      <Modal
+        visible={showCategoryModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCategoryModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity style={styles.closeButton} onPress={() => setShowCategoryModal(false)}>
+              <Text style={styles.closeText}>✕</Text>
+            </TouchableOpacity>
+            
+            <Text style={styles.modalTitle}>Select Category</Text>
+            
+            <ScrollView style={styles.categoryList}>
+              {availableCategories.map((category, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.categoryOption}
+                  onPress={() => selectCategory(category)}
+                >
+                  <Text style={styles.categoryOptionText}>{category}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -237,6 +279,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333333',
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 10,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  printButton: {
+    padding: 8,
+  },
+  printIcon: {
+    fontSize: 20,
   },
   editButton: {
     backgroundColor: '#FFB347',
@@ -252,15 +308,42 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
+  imageContainer: {
+    marginBottom: 20,
+  },
   image: {
     width: '100%',
-    height: 200,
+    height: 120,
     borderRadius: 12,
-    marginBottom: 20,
     backgroundColor: '#F0F0F0',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: 60,
+    borderRadius: 12,
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    borderStyle: 'dashed',
+  },
+  addImageIcon: {
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  addImageText: {
+    fontSize: 12,
+    color: '#666666',
   },
   section: {
     marginBottom: 25,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
   },
   sectionTitle: {
     fontSize: 18,
@@ -268,18 +351,16 @@ const styles = StyleSheet.create({
     color: '#333333',
     marginBottom: 10,
   },
-  foodTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333333',
+  addCategoryButton: {
+    backgroundColor: '#FFB347',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#FFFFFF',
+  addCategoryText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   categoryContainer: {
     flexDirection: 'row',
@@ -290,11 +371,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   categoryText: {
     fontSize: 14,
     color: '#2E7D32',
     fontWeight: '500',
+  },
+  removeCategoryText: {
+    fontSize: 10,
+    color: '#666666',
+    fontWeight: 'bold',
+  },
+  noCategoryText: {
+    fontSize: 14,
+    color: '#999999',
+    fontStyle: 'italic',
   },
   nutritionCard: {
     backgroundColor: '#FFFFFF',
@@ -307,109 +401,51 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  nutritionGrid: {
+  nutritionRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
   nutritionItem: {
-    width: '48%',
     alignItems: 'center',
-    marginBottom: 15,
+    flex: 1,
     backgroundColor: '#F8F9FA',
-    padding: 15,
+    padding: 10,
     borderRadius: 8,
+    marginHorizontal: 2,
   },
   nutritionLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666666',
     marginBottom: 8,
     fontWeight: '500',
   },
   nutritionValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#FFB347',
     marginBottom: 4,
   },
   nutritionUnit: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#666666',
   },
   nutritionInput: {
     borderWidth: 1,
     borderColor: '#E0E0E0',
     borderRadius: 6,
-    padding: 8,
-    fontSize: 16,
+    padding: 6,
+    fontSize: 14,
     textAlign: 'center',
     backgroundColor: '#FFFFFF',
-    minWidth: 80,
+    minWidth: 60,
     marginBottom: 4,
   },
-  summaryCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333333',
-    marginBottom: 15,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  summaryLabel: {
-    fontSize: 16,
-    color: '#666666',
-  },
-  summaryValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333333',
-  },
-  macroBreakdown: {
-    marginTop: 15,
-    paddingTop: 15,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-  },
-  breakdownTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333333',
-    marginBottom: 10,
-  },
-  breakdownRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  breakdownLabel: {
-    fontSize: 14,
-    color: '#666666',
-  },
-  breakdownValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFB347',
-  },
+
   editingActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 20,
+    marginTop: 15,
+    marginBottom: 20,
     gap: 15,
   },
   cancelButton: {
@@ -435,6 +471,49 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    width: '80%',
+    maxHeight: '60%',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    zIndex: 1,
+  },
+  closeText: {
+    fontSize: 18,
+    color: '#666666',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#333333',
+  },
+  categoryList: {
+    maxHeight: 200,
+  },
+  categoryOption: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  categoryOptionText: {
+    fontSize: 16,
+    color: '#333333',
   },
 });
 

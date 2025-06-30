@@ -2,6 +2,19 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
 
+// Import tags database with fallback
+let tagsDatabase: any;
+try {
+  tagsDatabase = require('../data/tagsDatabase').tagsDatabase;
+} catch (error) {
+  // Fallback database
+  tagsDatabase = {
+    categories: ['Breakfast', 'Lunch', 'Dinner', 'Snack'],
+    foodTypes: ['Fish', 'Chicken', 'Pork', 'Beef', 'Vegetarian', 'Vegan'],
+    allergens: ['Gluten', 'Dairy', 'Nuts', 'Eggs', 'Soy', 'Shellfish']
+  };
+}
+
 interface FilterModalProps {
   visible: boolean;
   onClose: () => void;
@@ -14,10 +27,6 @@ interface FilterModalProps {
   initialFoodTypes: string[];
   initialAllergens: string[];
 }
-
-const foodCategories = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
-const foodTypes = ['Fish', 'Chicken', 'Pork', 'Beef', 'Vegetarian', 'Vegan'];
-const allergens = ['Gluten', 'Dairy', 'Nuts', 'Eggs', 'Soy', 'Shellfish'];
 
 export const FilterModal: React.FC<FilterModalProps> = ({
   visible,
@@ -114,21 +123,21 @@ export const FilterModal: React.FC<FilterModalProps> = ({
           <ScrollView style={styles.scrollContent}>
             <FilterSection
               title="Categories"
-              items={foodCategories}
+              items={tagsDatabase.categories}
               selected={selectedCategories}
               onToggle={(item) => toggleSelection(item, selectedCategories, setSelectedCategories)}
             />
 
             <FilterSection
               title="Food Types"
-              items={foodTypes}
+              items={tagsDatabase.foodTypes}
               selected={selectedFoodTypes}
               onToggle={(item) => toggleSelection(item, selectedFoodTypes, setSelectedFoodTypes)}
             />
 
             <FilterSection
               title="Exclude Allergens"
-              items={allergens}
+              items={tagsDatabase.allergens}
               selected={selectedAllergens}
               onToggle={(item) => toggleSelection(item, selectedAllergens, setSelectedAllergens)}
             />

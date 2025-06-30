@@ -1,8 +1,8 @@
 // src/screens/RecipesScreen.tsx
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, FlatList, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, FlatList } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRecipeStore, Recipe, Food } from '../stores/recipeStore';
+import { Recipe, Food, useRecipeStore } from '../stores/recipeStore';
 import { RecipeCard } from '../components/RecipeCard';
 import { FoodCard } from '../components/FoodCard';
 import { FilterModal } from '../components/FilterModal';
