@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Button } from '../components/Button';
 import { PersonalInfoModal } from '../components/PersonalInfoModal';
 import { WeightCompositionModal } from '../components/WeightCompositionModal';

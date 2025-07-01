@@ -54,8 +54,8 @@ export const WeightCompositionModal: React.FC<WeightCompositionModalProps> = ({
 
   const gender = currentUser?.gender || 'Male';
   const bodyFatPercentages = gender === 'Male' 
-    ? [8, 10, 12, 15, 18, 20, 22, 25, 28, 30, 32, 35, 38, 40, 42, 45, 48, 50, 52, 55, 58, 60]
-    : [15, 17, 20, 22, 25, 27, 30, 32, 35, 37, 40, 42, 45, 47, 50, 52, 55, 57, 60];
+    ? [8, 12, 15, 20, 25, 30, 35]
+    : [15, 20, 25, 30, 35, 40, 45];
 
   useEffect(() => {
     if (visible && currentUser) {
@@ -145,7 +145,6 @@ export const WeightCompositionModal: React.FC<WeightCompositionModalProps> = ({
           maxLength={5}
           placeholder={`Enter weight in ${weightUnit}`}
         />
-        <Text style={styles.unit}>{weightUnit}</Text>
       </View>
     </View>
   );
@@ -304,7 +303,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 10,
   },
   infoButton: {
     padding: 5,

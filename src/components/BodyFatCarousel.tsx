@@ -1,10 +1,10 @@
 // src/components/BodyFatCarousel.tsx
-import React, { useEffect, useRef } from 'react';
-import { View, Text, FlatList, Dimensions, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, FlatList, Dimensions, StyleSheet, TouchableOpacity, Image } from 'react-native';
 
 const { width } = Dimensions.get('window');
-const ITEM_WIDTH = 80;
-const ITEM_SPACING = 10;
+const ITEM_WIDTH = 120;
+const ITEM_SPACING = 20;
 
 interface BodyFatCarouselProps {
   bodyFatPercentages: number[];
@@ -14,6 +14,38 @@ interface BodyFatCarouselProps {
   onCopyToBar: (value: string) => void;
 }
 
+// Image mapping for body fat percentages
+const getBodyFatImage = (percentage: number, gender: string) => {
+  try {
+    if (gender.toLowerCase() === 'male') {
+      switch (percentage) {
+        case 8: return require('../assets/images/body-fat/male/8BF.png');
+        case 12: return require('../assets/images/body-fat/male/12BF.png');
+        case 15: return require('../assets/images/body-fat/male/15BF.png');
+        case 20: return require('../assets/images/body-fat/male/20BF.png');
+        case 25: return require('../assets/images/body-fat/male/25BF.png');
+        case 30: return require('../assets/images/body-fat/male/30BF.png');
+        case 35: return require('../assets/images/body-fat/male/35BF.png');
+        default: return require('../assets/images/body-fat/male/20BF.png');
+      }
+    } else {
+      switch (percentage) {
+        case 15: return require('../assets/images/body-fat/female/15BFf.png');
+        case 20: return require('../assets/images/body-fat/female/20BFf.png');
+        case 25: return require('../assets/images/body-fat/female/25BFf.png');
+        case 30: return require('../assets/images/body-fat/female/30BFf.png');
+        case 35: return require('../assets/images/body-fat/female/35BFf.png');
+        case 40: return require('../assets/images/body-fat/female/40BFf.png');
+        case 45: return require('../assets/images/body-fat/female/45BFf.png');
+        default: return require('../assets/images/body-fat/female/25BFf.png');
+      }
+    }
+  } catch (error) {
+    console.warn(`Body fat image not found for ${percentage}% ${gender}`);
+    return null;
+  }
+};
+
 export const BodyFatCarousel: React.FC<BodyFatCarouselProps> = ({
   bodyFatPercentages,
   gender,
@@ -22,67 +54,101 @@ export const BodyFatCarousel: React.FC<BodyFatCarouselProps> = ({
   onCopyToBar
 }) => {
   const flatListRef = useRef<FlatList>(null);
+  const [selectedIndex, setSelectedIndex] = useState(initialIndex);
+  const [isScrolling, setIsScrolling] = useState(false);
 
+  // Initialize carousel position when component mounts
   useEffect(() => {
-    if (flatListRef.current && initialIndex < bodyFatPercentages.length) {
+    if (flatListRef.current && bodyFatPercentages.length > 0) {
       setTimeout(() => {
         flatListRef.current?.scrollToIndex({
           index: initialIndex,
           animated: false,
           viewPosition: 0.5
         });
-      }, 100);
+      }, 300);
     }
-  }, [initialIndex, bodyFatPercentages.length]);
+  }, []);
 
+  // Update selected index when initialIndex changes from parent
+  useEffect(() => {
+    setSelectedIndex(initialIndex);
+  }, [initialIndex]);
+
+  // Calculate item layout for smooth scrolling
   const getItemLayout = (_: any, index: number) => ({
     length: ITEM_WIDTH + ITEM_SPACING,
     offset: (ITEM_WIDTH + ITEM_SPACING) * index,
     index,
   });
 
-  const onScrollEnd = (event: any) => {
+  // Handle swipe/scroll end - update selected item based on scroll position
+  const handleScrollEnd = (event: any) => {
+    if (isScrolling) return; // Ignore if we're programmatically scrolling
+    
     const contentOffsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(contentOffsetX / (ITEM_WIDTH + ITEM_SPACING));
+    const newIndex = Math.round(contentOffsetX / (ITEM_WIDTH + ITEM_SPACING));
     
-    if (index >= 0 && index < bodyFatPercentages.length) {
-      onIndexChange(index);
+    if (newIndex >= 0 && newIndex < bodyFatPercentages.length && newIndex !== selectedIndex) {
+      setSelectedIndex(newIndex);
+      onIndexChange(newIndex);
     }
   };
 
-  const getBackgroundColor = (percentage: number) => {
-    const minValue = gender === 'Male' ? 8 : 15;
-    const maxValue = 60;
+  // Handle tap on any item - scroll to center it and select it
+  const handleItemPress = (index: number) => {
+    const percentage = bodyFatPercentages[index];
     
-    if (percentage <= minValue + 5) {
-      return '#4CAF50'; // Green - Very lean
-    } else if (percentage <= minValue + 15) {
-      return '#8BC34A'; // Light green - Lean
-    } else if (percentage <= minValue + 25) {
-      return '#FFEB3B'; // Yellow - Average
-    } else if (percentage <= minValue + 35) {
-      return '#FF9800'; // Orange - Above average
-    } else {
-      return '#F44336'; // Red - High
-    }
+    setIsScrolling(true); // Prevent handleScrollEnd from interfering
+    
+    // Update selected index
+    setSelectedIndex(index);
+    onIndexChange(index);
+    
+    // Copy value to input field
+    onCopyToBar(percentage.toString());
+    
+    // Scroll to center the tapped item
+    flatListRef.current?.scrollToIndex({
+      index: index,
+      animated: true,
+      viewPosition: 0.5
+    });
+    
+    // Reset scrolling flag after animation
+    setTimeout(() => {
+      setIsScrolling(false);
+    }, 500);
   };
 
+  // Render individual carousel item
   const renderItem = ({ item, index }: { item: number; index: number }) => {
-    const isSelected = index === initialIndex;
+    const isSelected = index === selectedIndex;
+    const imageSource = getBodyFatImage(item, gender);
     
     return (
       <TouchableOpacity
         style={[
           styles.carouselItem,
           {
-            backgroundColor: getBackgroundColor(item),
             transform: [{ scale: isSelected ? 1.1 : 1 }],
             opacity: isSelected ? 1 : 0.7,
           }
         ]}
-        onPress={() => onCopyToBar(item.toString())}
+        onPress={() => handleItemPress(index)}
         activeOpacity={0.7}
       >
+        {imageSource ? (
+          <Image 
+            source={imageSource} 
+            style={styles.bodyFatImage}
+            resizeMode="contain"
+          />
+        ) : (
+          <View style={styles.fallbackContainer}>
+            <Text style={styles.fallbackText}>{item}%</Text>
+          </View>
+        )}
         <Text style={styles.carouselText}>{item}%</Text>
       </TouchableOpacity>
     );
@@ -92,7 +158,6 @@ export const BodyFatCarousel: React.FC<BodyFatCarouselProps> = ({
     <View style={styles.container}>
       <Text style={styles.instruction}>Swipe to select body fat percentage</Text>
       <View style={styles.carouselContainer}>
-        <View style={styles.centerIndicator} />
         <FlatList
           ref={flatListRef}
           data={bodyFatPercentages}
@@ -102,55 +167,47 @@ export const BodyFatCarousel: React.FC<BodyFatCarouselProps> = ({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.flatListContent}
           snapToInterval={ITEM_WIDTH + ITEM_SPACING}
+          snapToAlignment="center"
           decelerationRate="fast"
-          onMomentumScrollEnd={onScrollEnd}
+          onMomentumScrollEnd={handleScrollEnd}
           getItemLayout={getItemLayout}
-          initialScrollIndex={initialIndex}
           onScrollToIndexFailed={(info) => {
             console.warn('ScrollToIndexFailed:', info);
           }}
         />
       </View>
-      <Text style={styles.copyInstruction}>Tap on a value to copy to input field</Text>
+      <Text style={styles.copyInstruction}>Tap on an image to copy percentage to input field</Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 20,
+    marginVertical: 0,
   },
   instruction: {
     textAlign: 'center',
     fontSize: 14,
     color: '#666666',
-    marginBottom: 10,
+    marginBottom: 0,
+    marginTop: 0,
   },
   carouselContainer: {
-    height: 80,
+    height: 280,
     position: 'relative',
     justifyContent: 'center',
-  },
-  centerIndicator: {
-    position: 'absolute',
-    left: width / 2 - 2,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: '#FFB347',
-    borderRadius: 2,
-    zIndex: 1,
   },
   flatListContent: {
     paddingHorizontal: width / 2 - ITEM_WIDTH / 2,
   },
   carouselItem: {
     width: ITEM_WIDTH,
-    height: 60,
+    height: 260,
     marginHorizontal: ITEM_SPACING / 2,
-    borderRadius: 30,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#F9F9F9',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -160,13 +217,29 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
-  carouselText: {
-    fontSize: 16,
+  bodyFatImage: {
+    width: 100,
+    height: 200,
+    marginBottom: 5,
+  },
+  fallbackContainer: {
+    width: 100,
+    height: 200,
+    borderRadius: 8,
+    backgroundColor: '#FFB347',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  fallbackText: {
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+  },
+  carouselText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#333333',
   },
   copyInstruction: {
     textAlign: 'center',
