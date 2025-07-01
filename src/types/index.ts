@@ -8,10 +8,18 @@ export interface User {
   heightUnit?: 'cm' | 'ft'; // unit selection
   heightFeet?: string; // feet value when using ft/in
   heightInches?: string; // inches value when using ft/in
-  weight?: string; // weight value
+  weight?: string; // current weight value
   weightUnit?: 'kg' | 'lbs'; // weight unit selection
-  bodyFat?: number; // %
+  bodyFat?: string; // current body fat percentage
+  goalWeight?: string; // goal weight value
+  goalBodyFat?: string; // goal body fat percentage
   activityLevel?: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
+}
+
+export interface WeightEntry {
+  date: string; // YYYY-MM-DD format
+  weight: number;
+  bodyFat?: number;
 }
 
 export interface Recipe {

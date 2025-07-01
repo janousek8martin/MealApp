@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Button } from '../components/Button';
 import { PersonalInfoModal } from '../components/PersonalInfoModal';
+import { WeightCompositionModal } from '../components/WeightCompositionModal';
+import { GoalWeightModal } from '../components/GoalWeightModal';
+import { ProgressionGraphModal } from '../components/ProgressionGraphModal';
 
 interface User {
   id: string;
@@ -15,6 +19,9 @@ interface User {
   heightInches?: string;
   weight?: string;
   weightUnit?: 'kg' | 'lbs';
+  bodyFat?: string;
+  goalWeight?: string;
+  goalBodyFat?: string;
 }
 
 interface ProfileSettingsScreenProps {
@@ -28,6 +35,18 @@ function UserDropdown({ users, selectedUser, onSelectUser, onAddUser }: {
   onAddUser: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+
+  const handleSelectUser = async (user: User) => {
+    onSelectUser(user);
+    setIsOpen(false);
+    
+    // Save selected user immediately
+    try {
+      await AsyncStorage.setItem('selectedUserId', user.id);
+    } catch (error) {
+      console.error('Error saving selected user:', error);
+    }
+  };
 
   return (
     <View style={styles.dropdown}>
@@ -56,10 +75,7 @@ function UserDropdown({ users, selectedUser, onSelectUser, onAddUser }: {
             <TouchableOpacity
               key={user.id}
               style={styles.dropdownItem}
-              onPress={() => {
-                onSelectUser(user);
-                setIsOpen(false);
-              }}
+              onPress={() => handleSelectUser(user)}
             >
               <Text style={[
                 styles.dropdownItemText,
@@ -77,14 +93,93 @@ function UserDropdown({ users, selectedUser, onSelectUser, onAddUser }: {
 
 export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ onBack }) => {
   const insets = useSafeAreaInsets();
-  const [users, setUsers] = useState<User[]>([
-    { id: '1', name: 'User 1' },
-    { id: '2', name: 'User 2' },
-    { id: '3', name: 'User 3' },
-  ]);
-  const [selectedUser, setSelectedUser] = useState<User | null>(users[0]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState<'name' | 'age' | 'gender' | 'height' | 'weight'>('name');
+  const [isLoading, setIsLoading] = useState(true);
+  const [weightCompositionModalVisible, setWeightCompositionModalVisible] = useState(false);
+  const [goalWeightModalVisible, setGoalWeightModalVisible] = useState(false);
+  const [progressionGraphModalVisible, setProgressionGraphModalVisible] = useState(false);
+
+  // Load data from AsyncStorage on component mount
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  // Save data whenever users array changes
+  useEffect(() => {
+    if (!isLoading && users.length > 0) {
+      saveUserData();
+    }
+  }, [users, isLoading]);
+
+  // Save selected user whenever it changes
+  useEffect(() => {
+    if (!isLoading && selectedUser) {
+      saveSelectedUser();
+    }
+  }, [selectedUser, isLoading]);
+
+  const loadUserData = async () => {
+    try {
+      // Load users data
+      const savedUsers = await AsyncStorage.getItem('profileUsers');
+      const savedSelectedUserId = await AsyncStorage.getItem('selectedUserId');
+      
+      if (savedUsers) {
+        const parsedUsers = JSON.parse(savedUsers);
+        setUsers(parsedUsers);
+        
+        // Set selected user
+        if (savedSelectedUserId) {
+          const foundUser = parsedUsers.find((user: User) => user.id === savedSelectedUserId);
+          setSelectedUser(foundUser || parsedUsers[0]);
+        } else if (parsedUsers.length > 0) {
+          setSelectedUser(parsedUsers[0]);
+        }
+      } else {
+        // Create default users if none exist
+        const defaultUsers: User[] = [
+          { id: '1', name: 'User 1' },
+          { id: '2', name: 'User 2' },
+          { id: '3', name: 'User 3' },
+        ];
+        setUsers(defaultUsers);
+        setSelectedUser(defaultUsers[0]);
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      // Fallback to default users
+      const defaultUsers: User[] = [
+        { id: '1', name: 'User 1' },
+        { id: '2', name: 'User 2' },
+        { id: '3', name: 'User 3' },
+      ];
+      setUsers(defaultUsers);
+      setSelectedUser(defaultUsers[0]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveUserData = async () => {
+    try {
+      await AsyncStorage.setItem('profileUsers', JSON.stringify(users));
+    } catch (error) {
+      console.error('Error saving user data:', error);
+    }
+  };
+
+  const saveSelectedUser = async () => {
+    try {
+      if (selectedUser) {
+        await AsyncStorage.setItem('selectedUserId', selectedUser.id);
+      }
+    } catch (error) {
+      console.error('Error saving selected user:', error);
+    }
+  };
 
   const handleBack = () => {
     onBack();
@@ -95,7 +190,8 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
       id: Date.now().toString(),
       name: `User ${users.length + 1}`,
     };
-    setUsers([...users, newUser]);
+    const updatedUsers = [...users, newUser];
+    setUsers(updatedUsers);
     setSelectedUser(newUser);
   };
 
@@ -104,7 +200,7 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
     setModalVisible(true);
   };
 
-  const handleSavePersonalInfo = (field: string, value: string | { [key: string]: string }) => {
+  const handleSavePersonalInfo = async (field: string, value: string | { [key: string]: string }) => {
     if (selectedUser) {
       let updatedUser: User;
       
@@ -119,8 +215,17 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
       const updatedUsers = users.map(user => 
         user.id === selectedUser.id ? updatedUser : user
       );
+      
       setUsers(updatedUsers);
       setSelectedUser(updatedUser);
+      
+      // Save immediately after update
+      try {
+        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
+        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
+      } catch (error) {
+        console.error('Error saving updated user data:', error);
+      }
     }
     setModalVisible(false);
   };
@@ -143,10 +248,23 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => {
+          onPress: async () => {
             const updatedUsers = users.filter(user => user.id !== selectedUser.id);
             setUsers(updatedUsers);
-            setSelectedUser(updatedUsers.length > 0 ? updatedUsers[0] : null);
+            const newSelectedUser = updatedUsers.length > 0 ? updatedUsers[0] : null;
+            setSelectedUser(newSelectedUser);
+            
+            // Save changes immediately
+            try {
+              await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
+              if (newSelectedUser) {
+                await AsyncStorage.setItem('selectedUserId', newSelectedUser.id);
+              } else {
+                await AsyncStorage.removeItem('selectedUserId');
+              }
+            } catch (error) {
+              console.error('Error saving after profile deletion:', error);
+            }
           }
         }
       ]
@@ -169,10 +287,63 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
     if (field === 'weight') {
       const weight = selectedUser.weight || '';
       const unit = selectedUser.weightUnit || 'kg';
-      return weight ? `${weight} ${unit}` : '';
+      const bodyFat = selectedUser.bodyFat ? ` (${selectedUser.bodyFat}% BF)` : '';
+      return weight ? `${weight} ${unit}${bodyFat}` : '';
     }
     
     return selectedUser[field] || '';
+  };
+
+  const handleSaveWeightComposition = async (data: { weight: string; bodyFat: string; weightUnit: 'kg' | 'lbs' }) => {
+    if (selectedUser) {
+      const updatedUser = { 
+        ...selectedUser, 
+        weight: data.weight,
+        bodyFat: data.bodyFat,
+        weightUnit: data.weightUnit
+      };
+      
+      const updatedUsers = users.map(user => 
+        user.id === selectedUser.id ? updatedUser : user
+      );
+      
+      setUsers(updatedUsers);
+      setSelectedUser(updatedUser);
+      
+      try {
+        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
+        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
+      } catch (error) {
+        console.error('Error saving weight composition:', error);
+      }
+    }
+    setWeightCompositionModalVisible(false);
+  };
+
+  const handleSaveGoalWeight = async (data: { goalWeight: string; goalBodyFat: string; weightUnit: 'kg' | 'lbs' }) => {
+    if (selectedUser) {
+      const updatedUser = { 
+        ...selectedUser, 
+        goalWeight: data.goalWeight,
+        goalBodyFat: data.goalBodyFat,
+        weightUnit: data.weightUnit
+      };
+      
+      const updatedUsers = users.map(user => 
+        user.id === selectedUser.id ? updatedUser : user
+      );
+      
+      setUsers(updatedUsers);
+      setSelectedUser(updatedUser);
+      
+      try {
+        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
+        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
+      } catch (error) {
+        console.error('Error saving goal weight:', error);
+      }
+    }
+    setGoalWeightModalVisible(false);
   };
 
   // Personal Information handlers
@@ -198,16 +369,15 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
 
   // Weight Goals handlers
   const handleWeightComposition = () => {
-    // Temporarily disabled - no modal functionality
-    console.log('Weight pressed - functionality disabled');
+    setWeightCompositionModalVisible(true);
   };
 
   const handleGoalWeight = () => {
-    console.log('Goal Weight pressed');
+    setGoalWeightModalVisible(true);
   };
 
   const handleProgressionGraph = () => {
-    console.log('Progression Graph pressed');
+    setProgressionGraphModalVisible(true);
   };
 
   // Nutritional Goals handlers
@@ -274,158 +444,166 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {/* Show loading indicator or content */}
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
+        ) : (
+          <>
+            {/* Personal Information */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Personal Information</Text>
+              
+              <TouchableOpacity style={styles.personalInfoItem} onPress={handleName}>
+                <Text style={styles.personalInfoLabel}>Name:</Text>
+                <Text style={styles.personalInfoValue}>{getDisplayValue('name')}</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.personalInfoItem} onPress={handleAge}>
+                <Text style={styles.personalInfoLabel}>Age:</Text>
+                <Text style={styles.personalInfoValue}>{getDisplayValue('age')}</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.personalInfoItem} onPress={handleGender}>
+                <Text style={styles.personalInfoLabel}>Gender:</Text>
+                <Text style={styles.personalInfoValue}>{getDisplayValue('gender')}</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.personalInfoItem} onPress={handleHeight}>
+                <Text style={styles.personalInfoLabel}>Height:</Text>
+                <Text style={styles.personalInfoValue}>{getDisplayValue('height')}</Text>
+              </TouchableOpacity>
+            </View>
 
-        {/* Personal Information */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Personal Information</Text>
-          
-          <TouchableOpacity style={styles.personalInfoItem} onPress={handleName}>
-            <Text style={styles.personalInfoLabel}>Name:</Text>
-            <Text style={styles.personalInfoValue}>{getDisplayValue('name')}</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.personalInfoItem} onPress={handleAge}>
-            <Text style={styles.personalInfoLabel}>Age:</Text>
-            <Text style={styles.personalInfoValue}>{getDisplayValue('age')}</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.personalInfoItem} onPress={handleGender}>
-            <Text style={styles.personalInfoLabel}>Gender:</Text>
-            <Text style={styles.personalInfoValue}>{getDisplayValue('gender')}</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.personalInfoItem} onPress={handleHeight}>
-            <Text style={styles.personalInfoLabel}>Height:</Text>
-            <Text style={styles.personalInfoValue}>{getDisplayValue('height')}</Text>
-          </TouchableOpacity>
-        </View>
+            {/* Weight Goals */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Weight Goals</Text>
+              
+              <TouchableOpacity style={styles.personalInfoItem} onPress={handleWeightComposition}>
+                <Text style={styles.personalInfoLabel}>Weight:</Text>
+                <Text style={styles.personalInfoValue}>{getDisplayValue('weight')}</Text>
+              </TouchableOpacity>
+              
+              <Button
+                title="Goal Weight"
+                onPress={handleGoalWeight}
+                variant="secondary"
+                size="large"
+                style={styles.settingButton}
+              />
+              
+              <Button
+                title="Progression Graph"
+                onPress={handleProgressionGraph}
+                variant="secondary"
+                size="large"
+                style={styles.settingButton}
+              />
+            </View>
 
-        {/* Weight Goals */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Weight Goals</Text>
-          
-          <TouchableOpacity style={styles.personalInfoItem} onPress={handleWeightComposition}>
-            <Text style={styles.personalInfoLabel}>Weight:</Text>
-            <Text style={styles.personalInfoValue}>{getDisplayValue('weight')}</Text>
-          </TouchableOpacity>
-          
-          <Button
-            title="Goal Weight"
-            onPress={handleGoalWeight}
-            variant="secondary"
-            size="large"
-            style={styles.settingButton}
-          />
-          
-          <Button
-            title="Progression Graph"
-            onPress={handleProgressionGraph}
-            variant="secondary"
-            size="large"
-            style={styles.settingButton}
-          />
-        </View>
+            {/* Nutritional Goals */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Nutritional Goals</Text>
+              
+              <Button
+                title="Basal Metabolic Rate"
+                onPress={handleBasalMetabolicRate}
+                variant="secondary"
+                size="large"
+                style={styles.settingButton}
+              />
+              
+              <Button
+                title="Activity Multiplier"
+                onPress={handleActivityMultiplier}
+                variant="secondary"
+                size="large"
+                style={styles.settingButton}
+              />
+              
+              <Button
+                title="Fitness Goals"
+                onPress={handleFitnessGoals}
+                variant="secondary"
+                size="large"
+                style={styles.settingButton}
+              />
+              
+              <Button
+                title="Total Daily Calorie Intake"
+                onPress={handleTotalDailyCalorieIntake}
+                variant="secondary"
+                size="large"
+                style={styles.settingButton}
+              />
+              
+              <Button
+                title="Macronutrient Ratios"
+                onPress={handleMacronutrientRatios}
+                variant="secondary"
+                size="large"
+                style={styles.settingButton}
+              />
+            </View>
 
-        {/* Nutritional Goals */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Nutritional Goals</Text>
-          
-          <Button
-            title="Basal Metabolic Rate"
-            onPress={handleBasalMetabolicRate}
-            variant="secondary"
-            size="large"
-            style={styles.settingButton}
-          />
-          
-          <Button
-            title="Activity Multiplier"
-            onPress={handleActivityMultiplier}
-            variant="secondary"
-            size="large"
-            style={styles.settingButton}
-          />
-          
-          <Button
-            title="Fitness Goals"
-            onPress={handleFitnessGoals}
-            variant="secondary"
-            size="large"
-            style={styles.settingButton}
-          />
-          
-          <Button
-            title="Total Daily Calorie Intake"
-            onPress={handleTotalDailyCalorieIntake}
-            variant="secondary"
-            size="large"
-            style={styles.settingButton}
-          />
-          
-          <Button
-            title="Macronutrient Ratios"
-            onPress={handleMacronutrientRatios}
-            variant="secondary"
-            size="large"
-            style={styles.settingButton}
-          />
-        </View>
+            {/* Meal Plan Preferences */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Meal Plan Preferences</Text>
+              
+              <Button
+                title="Workout Days"
+                onPress={handleWorkoutDays}
+                variant="secondary"
+                size="large"
+                style={styles.settingButton}
+              />
+              
+              <Button
+                title="Meal Preferences"
+                onPress={handleMealPreferences}
+                variant="secondary"
+                size="large"
+                style={styles.settingButton}
+              />
+              
+              <Button
+                title="Portion Sizes"
+                onPress={handlePortionSizes}
+                variant="secondary"
+                size="large"
+                style={styles.settingButton}
+              />
+              
+              <Button
+                title="Avoid Meals"
+                onPress={handleAvoidMeals}
+                variant="secondary"
+                size="large"
+                style={styles.settingButton}
+              />
+              
+              <Button
+                title="Max Meal Repetition"
+                onPress={handleMaxMealRepetition}
+                variant="secondary"
+                size="large"
+                style={styles.settingButton}
+              />
+            </View>
 
-        {/* Meal Plan Preferences */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Meal Plan Preferences</Text>
-          
-          <Button
-            title="Workout Days"
-            onPress={handleWorkoutDays}
-            variant="secondary"
-            size="large"
-            style={styles.settingButton}
-          />
-          
-          <Button
-            title="Meal Preferences"
-            onPress={handleMealPreferences}
-            variant="secondary"
-            size="large"
-            style={styles.settingButton}
-          />
-          
-          <Button
-            title="Portion Sizes"
-            onPress={handlePortionSizes}
-            variant="secondary"
-            size="large"
-            style={styles.settingButton}
-          />
-          
-          <Button
-            title="Avoid Meals"
-            onPress={handleAvoidMeals}
-            variant="secondary"
-            size="large"
-            style={styles.settingButton}
-          />
-          
-          <Button
-            title="Max Meal Repetition"
-            onPress={handleMaxMealRepetition}
-            variant="secondary"
-            size="large"
-            style={styles.settingButton}
-          />
-        </View>
-
-        {/* Delete Profile Button */}
-        <View style={styles.deleteSection}>
-          <Button
-            title="Delete Profile"
-            onPress={handleDeleteProfile}
-            variant="secondary"
-            size="large"
-            style={styles.deleteButton}
-          />
-        </View>
+            {/* Delete Profile Button */}
+            <View style={styles.deleteSection}>
+              <Button
+                title="Delete Profile"
+                onPress={handleDeleteProfile}
+                variant="secondary"
+                size="large"
+                style={styles.deleteButton}
+              />
+            </View>
+          </>
+        )}
       </ScrollView>
 
       {/* Personal Info Modal */}
@@ -435,6 +613,29 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
         currentUser={selectedUser}
         onSave={handleSavePersonalInfo}
         onCancel={handleCancelModal}
+      />
+
+      {/* Weight Composition Modal */}
+      <WeightCompositionModal
+        visible={weightCompositionModalVisible}
+        onClose={() => setWeightCompositionModalVisible(false)}
+        onSave={handleSaveWeightComposition}
+        currentUser={selectedUser}
+      />
+
+      {/* Goal Weight Modal */}
+      <GoalWeightModal
+        visible={goalWeightModalVisible}
+        onClose={() => setGoalWeightModalVisible(false)}
+        onSave={handleSaveGoalWeight}
+        currentUser={selectedUser}
+      />
+
+      {/* Progression Graph Modal */}
+      <ProgressionGraphModal
+        visible={progressionGraphModalVisible}
+        onClose={() => setProgressionGraphModalVisible(false)}
+        currentUser={selectedUser}
       />
     </View>
   );
@@ -600,5 +801,15 @@ const styles = StyleSheet.create({
   deleteButton: {
     backgroundColor: '#FF6B6B',
     borderColor: '#FF6B6B',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666666',
   },
 });
