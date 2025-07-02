@@ -1,4 +1,4 @@
-// src/components/BodyFatCarousel.tsx
+// src/components/BodyFatCarousel.tsx - Zjednodušená verze inspirovaná původní .txt verzí
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, FlatList, Dimensions, StyleSheet, TouchableOpacity, Image } from 'react-native';
 
@@ -12,6 +12,7 @@ interface BodyFatCarouselProps {
   initialIndex: number;
   onIndexChange: (index: number) => void;
   onCopyToBar: (value: string) => void;
+  inputValue?: string; // NOVÝ PROP pro input hodnotu
 }
 
 // Image mapping for body fat percentages
@@ -51,7 +52,8 @@ export const BodyFatCarousel: React.FC<BodyFatCarouselProps> = ({
   gender,
   initialIndex,
   onIndexChange,
-  onCopyToBar
+  onCopyToBar,
+  inputValue // NOVÝ PROP
 }) => {
   const flatListRef = useRef<FlatList>(null);
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
@@ -63,8 +65,7 @@ export const BodyFatCarousel: React.FC<BodyFatCarouselProps> = ({
       setTimeout(() => {
         flatListRef.current?.scrollToIndex({
           index: initialIndex,
-          animated: false,
-          viewPosition: 0.5
+          animated: false
         });
       }, 300);
     }
@@ -75,16 +76,46 @@ export const BodyFatCarousel: React.FC<BodyFatCarouselProps> = ({
     setSelectedIndex(initialIndex);
   }, [initialIndex]);
 
-  // Calculate item layout for smooth scrolling
+  // NOVÁ FUNKCE: Najít nejbližší body fat index (z původní verze)
+  const findClosestBodyFatIndex = (value: number): number => {
+    return bodyFatPercentages.reduce((prev, curr, index) => 
+      Math.abs(curr - value) < Math.abs(bodyFatPercentages[prev] - value) ? index : prev
+    , 0);
+  };
+
+  // NOVÝ USEEFFECT: Když se změní input hodnota, skoč na nejbližší obrázek
+  useEffect(() => {
+    if (inputValue && inputValue.trim() !== '') {
+      const numericValue = parseFloat(inputValue);
+      if (!isNaN(numericValue)) {
+        const closestIndex = findClosestBodyFatIndex(numericValue);
+        if (closestIndex !== selectedIndex) {
+          setSelectedIndex(closestIndex);
+          onIndexChange(closestIndex);
+          
+          // Animovaně posunout carousel na nejbližší obrázek
+          setTimeout(() => {
+            flatListRef.current?.scrollToIndex({
+              index: closestIndex,
+              animated: true,
+              viewPosition: 0.5
+            });
+          }, 100);
+        }
+      }
+    }
+  }, [inputValue]);
+
+  // Calculate item layout for smooth scrolling - ZJEDNODUŠENO
   const getItemLayout = (_: any, index: number) => ({
     length: ITEM_WIDTH + ITEM_SPACING,
     offset: (ITEM_WIDTH + ITEM_SPACING) * index,
     index,
   });
 
-  // Handle swipe/scroll end - update selected item based on scroll position
+  // Handle swipe/scroll end - ZJEDNODUŠENO
   const handleScrollEnd = (event: any) => {
-    if (isScrolling) return; // Ignore if we're programmatically scrolling
+    if (isScrolling) return;
     
     const contentOffsetX = event.nativeEvent.contentOffset.x;
     const newIndex = Math.round(contentOffsetX / (ITEM_WIDTH + ITEM_SPACING));
@@ -95,30 +126,10 @@ export const BodyFatCarousel: React.FC<BodyFatCarouselProps> = ({
     }
   };
 
-  // Handle tap on any item - scroll to center it and select it
+  // ZRUŠENÁ VERZE handleItemPress - pouze swipe
   const handleItemPress = (index: number) => {
-    const percentage = bodyFatPercentages[index];
-    
-    setIsScrolling(true); // Prevent handleScrollEnd from interfering
-    
-    // Update selected index
-    setSelectedIndex(index);
-    onIndexChange(index);
-    
-    // Copy value to input field
-    onCopyToBar(percentage.toString());
-    
-    // Scroll to center the tapped item
-    flatListRef.current?.scrollToIndex({
-      index: index,
-      animated: true,
-      viewPosition: 0.5
-    });
-    
-    // Reset scrolling flag after animation
-    setTimeout(() => {
-      setIsScrolling(false);
-    }, 500);
+    // Funkce je zatím vypnutá - pouze swipe funguje
+    return;
   };
 
   // Render individual carousel item
@@ -173,6 +184,15 @@ export const BodyFatCarousel: React.FC<BodyFatCarouselProps> = ({
           getItemLayout={getItemLayout}
           onScrollToIndexFailed={(info) => {
             console.warn('ScrollToIndexFailed:', info);
+            // Jednoduchý fallback
+            setTimeout(() => {
+              if (flatListRef.current) {
+                flatListRef.current.scrollToOffset({
+                  offset: info.averageItemLength * info.index,
+                  animated: true
+                });
+              }
+            }, 100);
           }}
         />
       </View>
@@ -198,6 +218,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   flatListContent: {
+    // OPRAVENÝ PADDING - přesné centrování
     paddingHorizontal: width / 2 - ITEM_WIDTH / 2,
   },
   carouselItem: {
