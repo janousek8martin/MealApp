@@ -36,6 +36,18 @@ export interface User {
     fatPercentage: number;
     carbsPercentage: number;
   };
+  
+  // New Meal Plan Preferences fields
+  workoutDays?: string[]; // ['Monday', 'Wednesday', 'Friday']
+  mealPreferences?: {
+    mealsPerDay: number;
+    snackPositions: string[];
+  };
+  portionSizes?: {
+    [key: string]: number; // struktura podle potřeby - např. { 'Proteins': 1.25, 'Carbohydrates': 1.0, 'Vegetables': 1.5 }
+  };
+  avoidMeals?: string[]; // seznam vyloučených jídel/ingrediencí
+  maxMealRepetition?: number; // max opakování za týden (1-7)
 }
 
 export interface WeightEntry {
@@ -88,6 +100,3 @@ export interface Meal {
   servings: number;
   time?: string; // HH:MM format
 }
-
-// Additional types from meal.ts
-export * from './meal';
