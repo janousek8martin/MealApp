@@ -8,6 +8,11 @@ import { PersonalInfoModal } from '../components/PersonalInfoModal';
 import { WeightCompositionModal } from '../components/WeightCompositionModal';
 import { GoalWeightModal } from '../components/GoalWeightModal';
 import { ProgressionGraphModal } from '../components/ProgressionGraphModal';
+// Import nových komponent s default export
+import {ActivityMultiplierModal} from '../components/ActivityMultiplierModal';
+import {FitnessGoalsModal} from '../components/FitnessGoalsModal'; 
+import {TotalDailyCalorieModal} from '../components/TotalDailyCalorieModal';
+import {MacronutrientRatiosModal} from '../components/MacronutrientRatiosModal';
 
 interface User {
   id: string;
@@ -23,6 +28,27 @@ interface User {
   bodyFat?: string;
   goalWeight?: string;
   goalBodyFat?: string;
+  // New nutritional goals fields
+  activityMultiplier?: number;
+  fitnessGoal?: {
+    goal: string;
+    fitnessLevel?: string | null;
+    calorieValue: string;
+  };
+  tdci?: {
+    baseTDCI: number;
+    adjustedTDCI: number;
+    weightChange: number;
+    manualAdjustment: number;
+  };
+  macronutrients?: {
+    protein: number;
+    fat: number;
+    carbs: number;
+    proteinPercentage: number;
+    fatPercentage: number;
+    carbsPercentage: number;
+  };
 }
 
 interface ProfileSettingsScreenProps {
@@ -102,98 +128,108 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
   const [weightCompositionModalVisible, setWeightCompositionModalVisible] = useState(false);
   const [goalWeightModalVisible, setGoalWeightModalVisible] = useState(false);
   const [progressionGraphModalVisible, setProgressionGraphModalVisible] = useState(false);
+  
+  // New modal states for nutritional goals
+  const [activityMultiplierModalVisible, setActivityMultiplierModalVisible] = useState(false);
+  const [fitnessGoalsModalVisible, setFitnessGoalsModalVisible] = useState(false);
+  const [totalDailyCalorieModalVisible, setTotalDailyCalorieModalVisible] = useState(false);
+  const [macronutrientRatiosModalVisible, setMacronutrientRatiosModalVisible] = useState(false);
+  
+  // Warning state for TDCI update
+  const [needsTDCIUpdate, setNeedsTDCIUpdate] = useState(false);
 
-  // Load data from AsyncStorage on component mount
   useEffect(() => {
-    loadUserData();
+    loadData();
   }, []);
 
-  // Save data whenever users array changes
   useEffect(() => {
-    if (!isLoading && users.length > 0) {
-      saveUserData();
+    if (selectedUser) {
+      checkTDCIUpdateNeeded();
     }
-  }, [users, isLoading]);
+  }, [selectedUser]);
 
-  // Save selected user whenever it changes
-  useEffect(() => {
-    if (!isLoading && selectedUser) {
-      saveSelectedUser();
-    }
-  }, [selectedUser, isLoading]);
-
-  const loadUserData = async () => {
+  const loadData = async () => {
     try {
-      // Load users data
-      const savedUsers = await AsyncStorage.getItem('profileUsers');
-      const savedSelectedUserId = await AsyncStorage.getItem('selectedUserId');
+      const storedUsers = await AsyncStorage.getItem('profileUsers');
+      const selectedUserId = await AsyncStorage.getItem('selectedUserId');
       
-      if (savedUsers) {
-        const parsedUsers = JSON.parse(savedUsers);
+      if (storedUsers) {
+        const parsedUsers: User[] = JSON.parse(storedUsers);
         setUsers(parsedUsers);
         
-        // Set selected user
-        if (savedSelectedUserId) {
-          const foundUser = parsedUsers.find((user: User) => user.id === savedSelectedUserId);
-          setSelectedUser(foundUser || parsedUsers[0]);
-        } else if (parsedUsers.length > 0) {
-          setSelectedUser(parsedUsers[0]);
+        if (selectedUserId) {
+          const foundUser = parsedUsers.find(user => user.id === selectedUserId);
+          if (foundUser) {
+            setSelectedUser(foundUser);
+          }
         }
-      } else {
-        // Create default users if none exist
-        const defaultUsers: User[] = [
-          { id: '1', name: 'User 1' },
-          { id: '2', name: 'User 2' },
-          { id: '3', name: 'User 3' },
-        ];
-        setUsers(defaultUsers);
-        setSelectedUser(defaultUsers[0]);
       }
+      
+      setIsLoading(false);
     } catch (error) {
-      console.error('Error loading user data:', error);
-      // Fallback to default users
-      const defaultUsers: User[] = [
-        { id: '1', name: 'User 1' },
-        { id: '2', name: 'User 2' },
-        { id: '3', name: 'User 3' },
-      ];
-      setUsers(defaultUsers);
-      setSelectedUser(defaultUsers[0]);
-    } finally {
+      console.error('Error loading data:', error);
       setIsLoading(false);
     }
   };
 
-  const saveUserData = async () => {
-    try {
-      await AsyncStorage.setItem('profileUsers', JSON.stringify(users));
-    } catch (error) {
-      console.error('Error saving user data:', error);
+  const calculateBMR = (user: User | null) => {
+    if (!user?.age || !user?.gender || !user?.weight) return 0;
+    
+    const age = parseInt(user.age);
+    const weight = parseFloat(user.weight);
+    let height = 0;
+    
+    if (user.heightUnit === 'cm' && user.height) {
+      height = parseFloat(user.height);
+    } else if (user.heightUnit === 'ft' && user.heightFeet && user.heightInches) {
+      const feet = parseFloat(user.heightFeet);
+      const inches = parseFloat(user.heightInches);
+      height = (feet * 12 + inches) * 2.54;
+    }
+    
+    if (user.gender === 'Male') {
+      return Math.round(88.362 + (13.397 * weight) + (4.799 * height) - (5.677 * age));
+    } else {
+      return Math.round(447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age));
     }
   };
 
-  const saveSelectedUser = async () => {
-    try {
-      if (selectedUser) {
-        await AsyncStorage.setItem('selectedUserId', selectedUser.id);
-      }
-    } catch (error) {
-      console.error('Error saving selected user:', error);
-    }
-  };
-
-  const handleBack = () => {
-    onBack();
-  };
-
-  const handleAddUser = () => {
-    const newUser: User = {
-      id: Date.now().toString(),
-      name: `User ${users.length + 1}`,
+  const calculateCurrentTDCI = (user: User | null) => {
+    if (!user) return { baseTDCI: 0, adjustedTDCI: 0, bmr: 0 };
+    
+    const bmr = calculateBMR(user);
+    const activityMultiplier = user.activityMultiplier || 1.2;
+    const baseTDCI = Math.round(bmr * activityMultiplier);
+    
+    const calorieAdjustment = user.fitnessGoal?.calorieValue ? parseFloat(user.fitnessGoal.calorieValue) : 0;
+    const adjustedTDCI = Math.round(baseTDCI * (1 + calorieAdjustment / 100));
+    
+    return {
+      baseTDCI,
+      adjustedTDCI,
+      bmr
     };
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    setSelectedUser(newUser);
+  };
+
+  const checkTDCIUpdateNeeded = () => {
+    if (!selectedUser) {
+      setNeedsTDCIUpdate(false);
+      return;
+    }
+
+    const currentCalculation = calculateCurrentTDCI(selectedUser);
+    const storedTDCI = selectedUser.tdci;
+
+    if (!storedTDCI) {
+      setNeedsTDCIUpdate(true);
+      return;
+    }
+
+    // Check if any key values have changed
+    const baseTDCIChanged = Math.abs(currentCalculation.baseTDCI - storedTDCI.baseTDCI) > 5;
+    const adjustedTDCIChanged = Math.abs(currentCalculation.adjustedTDCI - storedTDCI.adjustedTDCI) > 5;
+
+    setNeedsTDCIUpdate(baseTDCIChanged || adjustedTDCIChanged);
   };
 
   const handleOpenModal = (type: 'name' | 'age' | 'gender' | 'height' | 'weight') => {
@@ -201,17 +237,13 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
     setModalVisible(true);
   };
 
-  const handleSavePersonalInfo = async (field: string, value: string | { [key: string]: string }) => {
+  const handleCancelModal = () => {
+    setModalVisible(false);
+  };
+
+  const handleSavePersonalInfo = async (data: any) => {
     if (selectedUser) {
-      let updatedUser: User;
-      
-      if (typeof value === 'object') {
-        // Handle complex objects like height and weight with units
-        updatedUser = { ...selectedUser, ...value };
-      } else {
-        // Handle simple string values
-        updatedUser = { ...selectedUser, [field]: value };
-      }
+      const updatedUser = { ...selectedUser, ...data };
       
       const updatedUsers = users.map(user => 
         user.id === selectedUser.id ? updatedUser : user
@@ -220,89 +252,19 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
       setUsers(updatedUsers);
       setSelectedUser(updatedUser);
       
-      // Save immediately after update
       try {
         await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
         await AsyncStorage.setItem('selectedUserId', updatedUser.id);
       } catch (error) {
-        console.error('Error saving updated user data:', error);
+        console.error('Error saving personal info:', error);
       }
     }
     setModalVisible(false);
   };
 
-  const handleCancelModal = () => {
-    setModalVisible(false);
-  };
-
-  const handleDeleteProfile = () => {
-    if (!selectedUser) return;
-
-    Alert.alert(
-      "Delete Profile",
-      `Are you sure you want to delete the profile "${selectedUser.name}"? This action cannot be undone.`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            const updatedUsers = users.filter(user => user.id !== selectedUser.id);
-            setUsers(updatedUsers);
-            const newSelectedUser = updatedUsers.length > 0 ? updatedUsers[0] : null;
-            setSelectedUser(newSelectedUser);
-            
-            // Save changes immediately
-            try {
-              await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-              if (newSelectedUser) {
-                await AsyncStorage.setItem('selectedUserId', newSelectedUser.id);
-              } else {
-                await AsyncStorage.removeItem('selectedUserId');
-              }
-            } catch (error) {
-              console.error('Error saving after profile deletion:', error);
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const getDisplayValue = (field: keyof User) => {
-    if (!selectedUser) return '';
-    
-    if (field === 'height') {
-      if (selectedUser.heightUnit === 'ft') {
-        const feet = selectedUser.heightFeet || '';
-        const inches = selectedUser.heightInches || '';
-        return feet && inches ? `${feet}ft ${inches}in` : feet ? `${feet}ft` : '';
-      } else {
-        return selectedUser.height ? `${selectedUser.height} cm` : '';
-      }
-    }
-    
-    if (field === 'weight') {
-      const weight = selectedUser.weight || '';
-      const unit = selectedUser.weightUnit || 'kg';
-      const bodyFat = selectedUser.bodyFat ? ` (${selectedUser.bodyFat}% BF)` : '';
-      return weight ? `${weight} ${unit}${bodyFat}` : '';
-    }
-    
-    return selectedUser[field] || '';
-  };
-
-  const handleSaveWeightComposition = async (data: { weight: string; bodyFat: string; weightUnit: 'kg' | 'lbs' }) => {
+  const handleSaveWeightComposition = async (data: { weight: string; weightUnit: 'kg' | 'lbs'; bodyFat: string }) => {
     if (selectedUser) {
-      const updatedUser = { 
-        ...selectedUser, 
-        weight: data.weight,
-        bodyFat: data.bodyFat,
-        weightUnit: data.weightUnit
-      };
+      const updatedUser = { ...selectedUser, ...data };
       
       const updatedUsers = users.map(user => 
         user.id === selectedUser.id ? updatedUser : user
@@ -321,14 +283,9 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
     setWeightCompositionModalVisible(false);
   };
 
-  const handleSaveGoalWeight = async (data: { goalWeight: string; goalBodyFat: string; weightUnit: 'kg' | 'lbs' }) => {
+  const handleSaveGoalWeight = async (data: { goalWeight: string; goalBodyFat: string }) => {
     if (selectedUser) {
-      const updatedUser = { 
-        ...selectedUser, 
-        goalWeight: data.goalWeight,
-        goalBodyFat: data.goalBodyFat,
-        weightUnit: data.weightUnit
-      };
+      const updatedUser = { ...selectedUser, ...data };
       
       const updatedUsers = users.map(user => 
         user.id === selectedUser.id ? updatedUser : user
@@ -345,6 +302,190 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
       }
     }
     setGoalWeightModalVisible(false);
+  };
+
+  const handleSaveActivityMultiplier = async (multiplier: number) => {
+    if (selectedUser) {
+      const updatedUser: User = { ...selectedUser, activityMultiplier: multiplier };
+      
+      const updatedUsers = users.map(user => 
+        user.id === selectedUser.id ? updatedUser : user
+      );
+      
+      setUsers(updatedUsers);
+      setSelectedUser(updatedUser);
+      
+      try {
+        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
+        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
+      } catch (error) {
+        console.error('Error saving activity multiplier:', error);
+      }
+    }
+    setActivityMultiplierModalVisible(false);
+  };
+
+  const handleSaveFitnessGoals = async (data: { goal: string; fitnessLevel: string | null; calorieValue: string }) => {
+    if (selectedUser) {
+      const updatedUser: User = { ...selectedUser, fitnessGoal: data };
+      
+      const updatedUsers = users.map(user => 
+        user.id === selectedUser.id ? updatedUser : user
+      );
+      
+      setUsers(updatedUsers);
+      setSelectedUser(updatedUser);
+      
+      try {
+        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
+        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
+      } catch (error) {
+        console.error('Error saving fitness goals:', error);
+      }
+    }
+    setFitnessGoalsModalVisible(false);
+  };
+
+  const handleSaveTotalDailyCalorie = async (data: { baseTDCI: number; adjustedTDCI: number; weightChange: number; manualAdjustment: number }) => {
+    if (selectedUser) {
+      const updatedUser = { ...selectedUser, tdci: data };
+      
+      const updatedUsers = users.map(user => 
+        user.id === selectedUser.id ? updatedUser : user
+      );
+      
+      setUsers(updatedUsers);
+      setSelectedUser(updatedUser);
+      
+      try {
+        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
+        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
+      } catch (error) {
+        console.error('Error saving total daily calorie:', error);
+      }
+      
+      // Clear the update warning after saving
+      setNeedsTDCIUpdate(false);
+    }
+    setTotalDailyCalorieModalVisible(false);
+  };
+
+  const handleSaveMacronutrients = async (data: { protein: number; fat: number; carbs: number; proteinPercentage: number; fatPercentage: number; carbsPercentage: number }) => {
+    if (selectedUser) {
+      const updatedUser = { ...selectedUser, macronutrients: data };
+      
+      const updatedUsers = users.map(user => 
+        user.id === selectedUser.id ? updatedUser : user
+      );
+      
+      setUsers(updatedUsers);
+      setSelectedUser(updatedUser);
+      
+      try {
+        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
+        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
+      } catch (error) {
+        console.error('Error saving macronutrients:', error);
+      }
+    }
+    setMacronutrientRatiosModalVisible(false);
+  };
+
+  const handleAddUser = () => {
+    Alert.prompt(
+      'Add New User',
+      'Enter the name for the new user:',
+      (name) => {
+        if (name && name.trim()) {
+          const newUser: User = {
+            id: Date.now().toString(),
+            name: name.trim(),
+          };
+          
+          const updatedUsers = [...users, newUser];
+          setUsers(updatedUsers);
+          setSelectedUser(newUser);
+          
+          AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
+          AsyncStorage.setItem('selectedUserId', newUser.id);
+        }
+      }
+    );
+  };
+
+  const handleDeleteProfile = () => {
+    if (!selectedUser) return;
+    
+    Alert.alert(
+      'Delete Profile',
+      `Are you sure you want to delete ${selectedUser.name}'s profile? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            const updatedUsers = users.filter(user => user.id !== selectedUser.id);
+            setUsers(updatedUsers);
+            setSelectedUser(updatedUsers.length > 0 ? updatedUsers[0] : null);
+            
+            try {
+              await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
+              if (updatedUsers.length > 0) {
+                await AsyncStorage.setItem('selectedUserId', updatedUsers[0].id);
+              } else {
+                await AsyncStorage.removeItem('selectedUserId');
+              }
+            } catch (error) {
+              console.error('Error deleting profile:', error);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const getDisplayValue = (field: string) => {
+    if (!selectedUser) return 'Not set';
+    
+    switch (field) {
+      case 'name':
+        return selectedUser.name || 'Not set';
+      case 'age':
+        return selectedUser.age || 'Not set';
+      case 'gender':
+        return selectedUser.gender || 'Not set';
+      case 'height':
+        if (selectedUser.heightUnit === 'cm' && selectedUser.height) {
+          return `${selectedUser.height} cm`;
+        } else if (selectedUser.heightUnit === 'ft' && selectedUser.heightFeet && selectedUser.heightInches) {
+          return `${selectedUser.heightFeet}'${selectedUser.heightInches}"`;
+        }
+        return 'Not set';
+      case 'weight':
+        if (selectedUser.weight) {
+          const unit = selectedUser.weightUnit || 'kg';
+          return `${selectedUser.weight} ${unit}`;
+        }
+        return 'Not set';
+      case 'basalMetabolicRate':
+        const bmr = calculateBMR(selectedUser);
+        return bmr > 0 ? `${bmr} kcal` : 'Complete profile first';
+      case 'activityMultiplier':
+        return selectedUser.activityMultiplier ? `${selectedUser.activityMultiplier}` : 'Not set';
+      case 'fitnessGoals':
+        return selectedUser.fitnessGoal?.goal || 'Not set';
+      case 'totalDailyCalorieIntake':
+        return selectedUser.tdci?.adjustedTDCI ? `${selectedUser.tdci.adjustedTDCI} kcal` : 'Not set';
+      case 'macronutrientRatios':
+        if (selectedUser.macronutrients) {
+          const { proteinPercentage, fatPercentage, carbsPercentage } = selectedUser.macronutrients;
+          return `P: ${proteinPercentage}% F: ${fatPercentage}% C: ${carbsPercentage}%`;
+        }
+        return 'Not set';
+      default:
+        return 'Not set';
+    }
   };
 
   // Personal Information handlers
@@ -383,23 +524,23 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
 
   // Nutritional Goals handlers
   const handleBasalMetabolicRate = () => {
-    console.log('Basal Metabolic Rate pressed');
+    // BMR is calculated and displayed only, no modal needed
   };
 
   const handleActivityMultiplier = () => {
-    console.log('Activity Multiplier pressed');
+    setActivityMultiplierModalVisible(true);
   };
 
   const handleFitnessGoals = () => {
-    console.log('Fitness Goals pressed');
+    setFitnessGoalsModalVisible(true);
   };
 
   const handleTotalDailyCalorieIntake = () => {
-    console.log('Total Daily Calorie Intake pressed');
+    setTotalDailyCalorieModalVisible(true);
   };
 
   const handleMacronutrientRatios = () => {
-    console.log('Macronutrient Ratios pressed');
+    setMacronutrientRatiosModalVisible(true);
   };
 
   // Meal Plan Preferences handlers
@@ -428,24 +569,23 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
       {/* Status bar separator */}
       <View style={[styles.statusBarSeparator, { paddingTop: insets.top }]} />
       
-      {/* Header with dropdown */}
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+        <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile & Nutrition</Text>
+        <Text style={styles.headerTitle}>Profile Settings</Text>
         <View style={styles.headerDropdown}>
-          <UserDropdown
-            users={users}
-            selectedUser={selectedUser}
+          <UserDropdown 
+            users={users} 
+            selectedUser={selectedUser} 
             onSelectUser={setSelectedUser}
             onAddUser={handleAddUser}
           />
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Show loading indicator or content */}
+      <ScrollView style={styles.content}>
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Loading...</Text>
@@ -486,16 +626,13 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
                 <Text style={styles.personalInfoValue}>{getDisplayValue('weight')}</Text>
               </TouchableOpacity>
               
-              <Button
-                title="Goal Weight"
-                onPress={handleGoalWeight}
-                variant="secondary"
-                size="large"
-                style={styles.settingButton}
-              />
+              <TouchableOpacity style={styles.personalInfoItem} onPress={handleGoalWeight}>
+                <Text style={styles.personalInfoLabel}>Goal Weight:</Text>
+                <Text style={styles.personalInfoValue}>{selectedUser?.goalWeight || 'Not set'}</Text>
+              </TouchableOpacity>
               
               <Button
-                title="Progression Graph"
+                title="📈 Progression Graph"
                 onPress={handleProgressionGraph}
                 variant="secondary"
                 size="large"
@@ -507,45 +644,35 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Nutritional Goals</Text>
               
-              <Button
-                title="Basal Metabolic Rate"
-                onPress={handleBasalMetabolicRate}
-                variant="secondary"
-                size="large"
-                style={styles.settingButton}
-              />
+              <TouchableOpacity style={styles.personalInfoItem} onPress={handleBasalMetabolicRate}>
+                <Text style={styles.personalInfoLabel}>Basal Metabolic Rate:</Text>
+                <Text style={styles.personalInfoValue}>{getDisplayValue('basalMetabolicRate')}</Text>
+              </TouchableOpacity>
               
-              <Button
-                title="Activity Multiplier"
-                onPress={handleActivityMultiplier}
-                variant="secondary"
-                size="large"
-                style={styles.settingButton}
-              />
+              <TouchableOpacity style={styles.personalInfoItem} onPress={handleActivityMultiplier}>
+                <Text style={styles.personalInfoLabel}>Activity Multiplier:</Text>
+                <Text style={styles.personalInfoValue}>{getDisplayValue('activityMultiplier')}</Text>
+              </TouchableOpacity>
               
-              <Button
-                title="Fitness Goals"
-                onPress={handleFitnessGoals}
-                variant="secondary"
-                size="large"
-                style={styles.settingButton}
-              />
+              <TouchableOpacity style={styles.personalInfoItem} onPress={handleFitnessGoals}>
+                <Text style={styles.personalInfoLabel}>Fitness Goals:</Text>
+                <Text style={styles.personalInfoValue}>{getDisplayValue('fitnessGoals')}</Text>
+              </TouchableOpacity>
               
-              <Button
-                title="Total Daily Calorie Intake"
-                onPress={handleTotalDailyCalorieIntake}
-                variant="secondary"
-                size="large"
-                style={styles.settingButton}
-              />
+              <TouchableOpacity style={styles.personalInfoItem} onPress={handleTotalDailyCalorieIntake}>
+                <Text style={styles.personalInfoLabel}>Calorie Intake:</Text>
+                <View style={styles.calorieIntakeContainer}>
+                  <Text style={styles.personalInfoValue}>{getDisplayValue('totalDailyCalorieIntake')}</Text>
+                  {needsTDCIUpdate && (
+                    <Icon name="warning" size={20} color="#FF6B6B" style={styles.warningIcon} />
+                  )}
+                </View>
+              </TouchableOpacity>
               
-              <Button
-                title="Macronutrient Ratios"
-                onPress={handleMacronutrientRatios}
-                variant="secondary"
-                size="large"
-                style={styles.settingButton}
-              />
+              <TouchableOpacity style={styles.personalInfoItem} onPress={handleMacronutrientRatios}>
+                <Text style={styles.personalInfoLabel}>Macro Ratios:</Text>
+                <Text style={styles.personalInfoValue}>{getDisplayValue('macronutrientRatios')}</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Meal Plan Preferences */}
@@ -638,6 +765,39 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
         onClose={() => setProgressionGraphModalVisible(false)}
         currentUser={selectedUser}
       />
+
+      {/* Activity Multiplier Modal */}
+      <ActivityMultiplierModal
+        visible={activityMultiplierModalVisible}
+        onClose={() => setActivityMultiplierModalVisible(false)}
+        currentUser={selectedUser}
+        onSave={handleSaveActivityMultiplier}
+      />
+
+      {/* Fitness Goals Modal */}
+      <FitnessGoalsModal
+        visible={fitnessGoalsModalVisible}
+        onClose={() => setFitnessGoalsModalVisible(false)}
+        currentUser={selectedUser}
+        onSave={handleSaveFitnessGoals}
+      />
+
+      {/* Total Daily Calorie Modal */}
+      <TotalDailyCalorieModal
+        visible={totalDailyCalorieModalVisible}
+        onClose={() => setTotalDailyCalorieModalVisible(false)}
+        currentUser={selectedUser}
+        onSave={handleSaveTotalDailyCalorie}
+        bmr={calculateBMR(selectedUser)}
+      />
+
+      {/* Macronutrient Ratios Modal */}
+      <MacronutrientRatiosModal
+        visible={macronutrientRatiosModalVisible}
+        onClose={() => setMacronutrientRatiosModalVisible(false)}
+        currentUser={selectedUser}
+        onSave={handleSaveMacronutrients}
+      />
     </View>
   );
 };
@@ -726,6 +886,15 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     flex: 1,
     marginLeft: 16,
+  },
+  calorieIntakeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  warningIcon: {
+    marginLeft: 8,
   },
   dropdown: {
     position: 'relative',

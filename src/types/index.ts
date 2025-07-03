@@ -14,6 +14,28 @@ export interface User {
   goalWeight?: string; // goal weight value
   goalBodyFat?: string; // goal body fat percentage
   activityLevel?: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
+  
+  // New nutritional goals fields
+  activityMultiplier?: number; // 1.2 - 2.2
+  fitnessGoal?: {
+    goal: string; // 'Lose Fat' | 'Maintenance' | 'Build Muscle' | 'Lose Fat & Build Muscle'
+    fitnessLevel?: string; // 'Beginner' | 'Intermediate' | 'Advanced'
+    calorieValue: string; // percentage adjustment like '-20', '0', '25'
+  };
+  tdci?: {
+    baseTDCI: number;
+    adjustedTDCI: number;
+    weightChange: number;
+    manualAdjustment: number;
+  };
+  macronutrients?: {
+    protein: number; // grams
+    fat: number; // grams
+    carbs: number; // grams
+    proteinPercentage: number;
+    fatPercentage: number;
+    carbsPercentage: number;
+  };
 }
 
 export interface WeightEntry {
