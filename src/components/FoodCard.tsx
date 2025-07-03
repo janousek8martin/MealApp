@@ -1,22 +1,22 @@
-// src/components/RecipeCard.tsx
+// src/components/FoodCard.tsx
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { Recipe } from '../stores/recipeStore';
+import { Food } from '../stores/recipeStore';
 
-interface RecipeCardProps {
-  recipe: Recipe;
+interface FoodCardProps {
+  food: Food;
   isSelected: boolean;
   onPress: () => void;
   onLongPress: () => void;
 }
 
-export const RecipeCard: React.FC<RecipeCardProps> = ({
-  recipe,
+export const FoodCard: React.FC<FoodCardProps> = ({
+  food,
   isSelected,
   onPress,
   onLongPress
 }) => {
-  const hasValidImage = recipe.image && recipe.image !== 'https://via.placeholder.com/150';
+  const hasValidImage = food.image && food.image !== 'https://via.placeholder.com/150';
 
   return (
     <TouchableOpacity 
@@ -26,43 +26,38 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
       delayLongPress={500}
     >
       {hasValidImage && (
-        <Image source={{ uri: recipe.image }} style={styles.image} />
+        <Image source={{ uri: food.image }} style={styles.image} />
       )}
       
       <View style={styles.content}>
-        <Text style={styles.name} numberOfLines={2}>{recipe.name}</Text>
+        <Text style={styles.name} numberOfLines={2}>{food.name}</Text>
         
         <View style={styles.nutritionContainer}>
           <View style={styles.nutritionItem}>
-            <Text style={styles.nutritionValue}>{recipe.calories}</Text>
+            <Text style={styles.nutritionValue}>{food.calories}</Text>
             <Text style={styles.nutritionLabel}>kcal</Text>
           </View>
           <View style={styles.nutritionItem}>
-            <Text style={styles.nutritionValue}>{recipe.protein}g</Text>
+            <Text style={styles.nutritionValue}>{food.protein}g</Text>
             <Text style={styles.nutritionLabel}>protein</Text>
           </View>
           <View style={styles.nutritionItem}>
-            <Text style={styles.nutritionValue}>{recipe.carbs}g</Text>
+            <Text style={styles.nutritionValue}>{food.carbs}g</Text>
             <Text style={styles.nutritionLabel}>carbs</Text>
           </View>
           <View style={styles.nutritionItem}>
-            <Text style={styles.nutritionValue}>{recipe.fat}g</Text>
+            <Text style={styles.nutritionValue}>{food.fat}g</Text>
             <Text style={styles.nutritionLabel}>fat</Text>
           </View>
         </View>
         
-        <View style={styles.tagsContainer}>
-          {recipe.categories.slice(0, 2).map((category, index) => (
-            <View key={index} style={styles.tag}>
-              <Text style={styles.tagText}>{category}</Text>
+        {food.category && (
+          <View style={styles.tagsContainer}>
+            <View style={styles.tag}>
+              <Text style={styles.tagText}>{food.category}</Text>
             </View>
-          ))}
-          {recipe.foodTypes.slice(0, 1).map((type, index) => (
-            <View key={`type-${index}`} style={[styles.tag, styles.typeTag]}>
-              <Text style={[styles.tagText, styles.typeTagText]}>{type}</Text>
-            </View>
-          ))}
-        </View>
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -131,15 +126,9 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 8,
   },
-  typeTag: {
-    backgroundColor: '#E3F2FD',
-  },
   tagText: {
     fontSize: 10,
     color: '#2E7D32',
     fontWeight: '500',
-  },
-  typeTagText: {
-    color: '#1565C0',
   },
 });

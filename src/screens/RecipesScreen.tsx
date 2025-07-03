@@ -1,11 +1,16 @@
 // src/screens/RecipesScreen.tsx
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, FlatList, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, FlatList } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useMealStore } from '../stores/mealStore';
+import { Recipe, Food, useRecipeStore } from '../stores/recipeStore';
 import { RecipeCard } from '../components/RecipeCard';
+import { FoodCard } from '../components/FoodCard';
 import { FilterModal } from '../components/FilterModal';
-import { Recipe } from '../types/meal';
+import RecipeDetailScreen from './RecipeDetailScreen';
+import FoodDetailScreen from './FoodDetailScreen';
+
+type ActiveTab = 'Recipes' | 'Foods';
+type ViewMode = 'list' | 'recipeDetail' | 'foodDetail';
 
 interface RecipesScreenProps {
   navigation?: {
@@ -15,205 +20,303 @@ interface RecipesScreenProps {
 
 export const RecipesScreen: React.FC<RecipesScreenProps> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedRecipes, setSelectedRecipes] = useState<string[]>([]);
-  const [showFilterModal, setShowFilterModal] = useState(false);
-
+  const [activeTab, setActiveTab] = useState<ActiveTab>('Recipes');
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [selectedRecipeForDetail, setSelectedRecipeForDetail] = useState<Recipe | null>(null);
+  const [selectedFoodForDetail, setSelectedFoodForDetail] = useState<Food | null>(null);
+  
   const {
     searchQuery,
-    setSearchQuery,
-    getFilteredRecipes,
-    addRecipe,
-    deleteRecipes,
-    clearFilters,
     selectedCategories,
     selectedFoodTypes,
-    selectedAllergens
-  } = useMealStore();
+    selectedAllergens,
+    selectedRecipes,
+    selectedFoods,
+    setSearchQuery,
+    setSelectedCategories,
+    setSelectedFoodTypes,
+    setSelectedAllergens,
+    clearFilters,
+    addRecipe,
+    deleteRecipe,
+    toggleRecipeSelection,
+    clearRecipeSelection,
+    addFood,
+    deleteFood,
+    toggleFoodSelection,
+    clearFoodSelection,
+    getFilteredRecipes,
+    getFilteredFoods
+  } = useRecipeStore();
 
   const filteredRecipes = getFilteredRecipes();
-  const hasActiveFilters = selectedCategories.length > 0 || selectedFoodTypes.length > 0 || selectedAllergens.length > 0;
+  const filteredFoods = getFilteredFoods();
 
-  const handleRecipePress = (recipe: Recipe) => {
-    if (selectionMode) {
-      toggleRecipeSelection(recipe.id);
+  const handleAddNew = () => {
+    if (activeTab === 'Recipes') {
+      const newRecipe: Recipe = {
+        id: Date.now().toString(),
+        name: 'New Recipe',
+        categories: [],
+        foodTypes: [],
+        allergens: [],
+        prepTime: '0',
+        cookTime: '0',
+        protein: '0',
+        carbs: '0',
+        fat: '0',
+        calories: '0',
+        instructions: '',
+        ingredients: [],
+        image: 'https://via.placeholder.com/150',
+      };
+      addRecipe(newRecipe);
     } else {
-      // Navigate to recipe details
-      if (navigation) {
-        navigation.navigate('RecipeDetails', { recipeId: recipe.id });
-      } else {
-        console.log('Navigate to recipe details:', recipe.id);
-      }
+      const newFood: Food = {
+        id: Date.now().toString(),
+        name: 'New Food',
+        protein: '0',
+        carbs: '0',
+        fat: '0',
+        calories: '0',
+        image: 'https://via.placeholder.com/150',
+      };
+      addFood(newFood);
     }
-  };
-
-  const handleRecipeLongPress = (recipe: Recipe) => {
-    if (!selectionMode) {
-      setSelectionMode(true);
-      setSelectedRecipes([recipe.id]);
-    }
-  };
-
-  const toggleRecipeSelection = (recipeId: string) => {
-    setSelectedRecipes(prev =>
-      prev.includes(recipeId)
-        ? prev.filter(id => id !== recipeId)
-        : [...prev, recipeId]
-    );
-  };
-
-  const handleAddRecipe = () => {
-    // Create a new basic recipe
-    const newRecipe = {
-      name: 'New Recipe',
-      description: 'Tap to edit this recipe',
-      prepTime: 0,
-      cookTime: 0,
-      servings: 1,
-      categories: ['Breakfast'],
-      ingredients: [],
-      instructions: [],
-      nutrition: { calories: 0, protein: 0, carbs: 0, fat: 0 },
-      image: 'https://via.placeholder.com/150x100/E0E0E0/999999?text=New+Recipe'
-    };
-    
-    addRecipe(newRecipe);
   };
 
   const handleDeleteSelected = () => {
+    const selectedCount = activeTab === 'Recipes' ? selectedRecipes.length : selectedFoods.length;
+    
+    if (selectedCount === 0) return;
+    
     Alert.alert(
-      'Delete Recipes',
-      `Are you sure you want to delete ${selectedRecipes.length} recipe${selectedRecipes.length > 1 ? 's' : ''}?`,
+      `Delete ${activeTab}`,
+      `Are you sure you want to delete ${selectedCount} selected ${activeTab.toLowerCase()}?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
+        { 
+          text: 'Delete', 
           style: 'destructive',
           onPress: () => {
-            deleteRecipes(selectedRecipes);
-            setSelectedRecipes([]);
-            setSelectionMode(false);
+            if (activeTab === 'Recipes') {
+              selectedRecipes.forEach(id => deleteRecipe(id));
+              clearRecipeSelection();
+            } else {
+              selectedFoods.forEach(id => deleteFood(id));
+              clearFoodSelection();
+            }
           }
         }
       ]
     );
   };
 
-  const exitSelectionMode = () => {
-    setSelectionMode(false);
-    setSelectedRecipes([]);
+  const handleRecipePress = (recipe: Recipe) => {
+    if (selectedRecipes.length > 0) {
+      toggleRecipeSelection(recipe.id);
+    } else {
+      // Show recipe detail screen
+      setSelectedRecipeForDetail(recipe);
+      setViewMode('recipeDetail');
+    }
   };
 
-  const renderRecipe = ({ item, index }: { item: Recipe; index: number }) => (
-    <View style={[styles.recipeCardContainer, index % 2 === 1 && styles.recipeCardRight]}>
-      <RecipeCard
-        recipe={item}
-        isSelected={selectedRecipes.includes(item.id)}
-        selectionMode={selectionMode}
-        onPress={() => handleRecipePress(item)}
-        onLongPress={() => handleRecipeLongPress(item)}
+  const handleFoodPress = (food: Food) => {
+    if (selectedFoods.length > 0) {
+      toggleFoodSelection(food.id);
+    } else {
+      // Show food detail screen
+      setSelectedFoodForDetail(food);
+      setViewMode('foodDetail');
+    }
+  };
+
+  const handleBackToList = () => {
+    setViewMode('list');
+    setSelectedRecipeForDetail(null);
+    setSelectedFoodForDetail(null);
+  };
+
+  const handleTabChange = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    // Clear selections when switching tabs
+    clearRecipeSelection();
+    clearFoodSelection();
+  };
+
+  const handleApplyFilters = (filters: {
+    categories: string[];
+    foodTypes: string[];
+    allergens: string[];
+  }) => {
+    setSelectedCategories(filters.categories);
+    setSelectedFoodTypes(filters.foodTypes);
+    setSelectedAllergens(filters.allergens);
+  };
+
+  const hasActiveFilters = selectedCategories.length > 0 || selectedFoodTypes.length > 0 || selectedAllergens.length > 0;
+  const hasSelections = (activeTab === 'Recipes' ? selectedRecipes.length : selectedFoods.length) > 0;
+
+  const renderRecipeItem = ({ item }: { item: Recipe }) => (
+    <RecipeCard
+      recipe={item}
+      isSelected={selectedRecipes.includes(item.id)}
+      onPress={() => handleRecipePress(item)}
+      onLongPress={() => toggleRecipeSelection(item.id)}
+    />
+  );
+
+  const renderFoodItem = ({ item }: { item: Food }) => (
+    <FoodCard
+      food={item}
+      isSelected={selectedFoods.includes(item.id)}
+      onPress={() => handleFoodPress(item)}
+      onLongPress={() => toggleFoodSelection(item.id)}
+    />
+  );
+
+  // Show detail screens when in detail mode
+  if (viewMode === 'recipeDetail' && selectedRecipeForDetail) {
+    return (
+      <RecipeDetailScreen
+        recipe={selectedRecipeForDetail}
+        onBack={handleBackToList}
       />
-    </View>
-  );
+    );
+  }
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>📖</Text>
-      <Text style={styles.emptyTitle}>No Recipes Found</Text>
-      <Text style={styles.emptyText}>
-        {searchQuery || hasActiveFilters
-          ? 'Try adjusting your search or filters'
-          : 'Start by adding your first recipe!'}
-      </Text>
-    </View>
-  );
+  if (viewMode === 'foodDetail' && selectedFoodForDetail) {
+    return (
+      <FoodDetailScreen
+        food={selectedFoodForDetail}
+        onBack={handleBackToList}
+      />
+    );
+  }
 
+  // Main list view
   return (
     <View style={styles.container}>
       {/* Status bar separator */}
       <View style={[styles.statusBarSeparator, { paddingTop: insets.top }]} />
-
-      {/* Header */}
-      <View style={styles.header}>
-        {selectionMode ? (
-          <>
-            <TouchableOpacity style={styles.backButton} onPress={exitSelectionMode}>
-              <Text style={styles.backIcon}>←</Text>
-            </TouchableOpacity>
-            <Text style={styles.selectionTitle}>
-              {selectedRecipes.length} selected
+      
+      {/* Top Header with Tab Navigation */}
+      <View style={styles.topHeader}>
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'Recipes' && styles.activeTab]}
+            onPress={() => handleTabChange('Recipes')}
+          >
+            <Text style={[styles.tabText, activeTab === 'Recipes' && styles.activeTabText]}>
+              Recipes
             </Text>
-            <TouchableOpacity 
-              style={[styles.deleteButton, selectedRecipes.length === 0 && styles.disabledButton]}
-              onPress={handleDeleteSelected}
-              disabled={selectedRecipes.length === 0}
-            >
-              <Text style={styles.deleteIcon}>🗑️</Text>
-            </TouchableOpacity>
-          </>
+          </TouchableOpacity>
+          <Text style={styles.tabSeparator}>|</Text>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'Foods' && styles.activeTab]}
+            onPress={() => handleTabChange('Foods')}
+          >
+            <Text style={[styles.tabText, activeTab === 'Foods' && styles.activeTabText]}>
+              Foods
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Search and Filter Row */}
+      <View style={styles.searchFilterContainer}>
+        <View style={styles.searchContainer}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder={`Search ${activeTab.toLowerCase()}...`}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          <TouchableOpacity 
+            style={[styles.filterIconButton, hasActiveFilters && styles.activeFilterIconButton]}
+            onPress={() => setIsFilterModalVisible(true)}
+          >
+            <Text style={[styles.filterIconText, hasActiveFilters && styles.activeFilterIconText]}>
+              ⩪
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Action Buttons Row */}
+      <View style={styles.actionButtonsContainer}>
+        <View style={styles.leftActions}>
+          <TouchableOpacity 
+            style={[styles.deleteButton, { opacity: hasSelections ? 1 : 0.3 }]} 
+            onPress={handleDeleteSelected}
+            disabled={!hasSelections}
+          >
+            <Text style={styles.deleteIcon}>✕</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addButton} onPress={handleAddNew}>
+            <Text style={styles.addIcon}>+</Text>
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.rightActions}>
+          <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
+            <Text style={styles.clearFiltersText}>Clear Filter</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Content List */}
+      <View style={styles.content}>
+        <Text style={styles.sectionHeader}>
+          {activeTab} ({activeTab === 'Recipes' ? filteredRecipes.length : filteredFoods.length})
+        </Text>
+        
+        {activeTab === 'Recipes' ? (
+          <FlatList
+            data={filteredRecipes}
+            renderItem={renderRecipeItem}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContent}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No recipes found</Text>
+                <Text style={styles.emptyStateSubtext}>
+                  {searchQuery || hasActiveFilters ? 'Try adjusting your search or filters' : 'Add your first recipe to get started'}
+                </Text>
+              </View>
+            }
+          />
         ) : (
-          <>
-            <Text style={styles.headerTitle}>Recipes</Text>
-            <TouchableOpacity style={styles.addButton} onPress={handleAddRecipe}>
-              <Text style={styles.addIcon}>+</Text>
-            </TouchableOpacity>
-          </>
+          <FlatList
+            data={filteredFoods}
+            renderItem={renderFoodItem}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContent}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No foods found</Text>
+                <Text style={styles.emptyStateSubtext}>
+                  {searchQuery ? 'Try adjusting your search' : 'Add your first food item to get started'}
+                </Text>
+              </View>
+            }
+          />
         )}
       </View>
 
-      {/* Search and Filter Bar */}
-      {!selectionMode && (
-        <View style={styles.searchContainer}>
-          <View style={styles.searchInputContainer}>
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search recipes..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              returnKeyType="search"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Text style={styles.clearSearchIcon}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          
-          <TouchableOpacity 
-            style={[styles.filterButton, hasActiveFilters && styles.filterButtonActive]}
-            onPress={() => setShowFilterModal(true)}
-          >
-            <Text style={[styles.filterIcon, hasActiveFilters && styles.filterIconActive]}>⚙️</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Clear Filters Button */}
-      {!selectionMode && hasActiveFilters && (
-        <View style={styles.clearFiltersContainer}>
-          <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
-            <Text style={styles.clearFiltersText}>Clear Filters</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Recipe List */}
-      <FlatList
-        data={filteredRecipes}
-        renderItem={renderRecipe}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        contentContainerStyle={styles.listContainer}
-        columnWrapperStyle={styles.row}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={renderEmptyState}
-      />
-
       {/* Filter Modal */}
       <FilterModal
-        visible={showFilterModal}
-        onClose={() => setShowFilterModal(false)}
+        visible={isFilterModalVisible}
+        onClose={() => setIsFilterModalVisible(false)}
+        onApply={handleApplyFilters}
+        initialCategories={selectedCategories}
+        initialFoodTypes={selectedFoodTypes}
+        initialAllergens={selectedAllergens}
       />
     </View>
   );
@@ -238,71 +341,59 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333333',
-  },
-  addButton: {
-    backgroundColor: '#FFB347',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addIcon: {
-    fontSize: 24,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  backButton: {
-    padding: 5,
-  },
-  backIcon: {
-    fontSize: 24,
-    color: '#FFB347',
-    fontWeight: 'bold',
-  },
-  selectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333333',
-    flex: 1,
-    textAlign: 'center',
-  },
-  deleteButton: {
-    backgroundColor: '#FF6B6B',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deleteIcon: {
-    fontSize: 18,
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  searchContainer: {
-    flexDirection: 'row',
     paddingHorizontal: 20,
+    paddingVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tab: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  activeTab: {
+    backgroundColor: '#FFB347',
+    borderRadius: 5,
+  },
+  tabText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333333',
+  },
+  activeTabText: {
+    color: '#FFFFFF',
+  },
+  tabSeparator: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginHorizontal: 10,
+    color: '#333333',
+  },
+  searchFilterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 15,
     paddingVertical: 15,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    gap: 10,
+    alignItems: 'center',
   },
-  searchInputContainer: {
+  searchContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F0F0F0',
-    borderRadius: 12,
+    borderRadius: 25,
     paddingHorizontal: 15,
-    paddingVertical: 12,
+    height: 50,
   },
   searchIcon: {
     fontSize: 16,
@@ -313,81 +404,111 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333333',
   },
-  clearSearchIcon: {
-    fontSize: 16,
-    color: '#999999',
-    marginLeft: 10,
+  filterIconButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 15,
+    backgroundColor: 'transparent',
   },
-  filterButton: {
-    backgroundColor: '#F0F0F0',
-    borderRadius: 12,
-    width: 48,
-    height: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  filterButtonActive: {
+  activeFilterIconButton: {
     backgroundColor: '#FFB347',
   },
-  filterIcon: {
-    fontSize: 18,
+  filterIconText: {
+    fontSize: 16,
+    color: '#666666',
   },
-  filterIconActive: {
-    fontSize: 18,
+  activeFilterIconText: {
+    color: '#FFFFFF',
   },
-  clearFiltersContainer: {
-    paddingHorizontal: 20,
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 15,
     paddingVertical: 10,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
   },
+  leftActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   clearFiltersButton: {
-    alignSelf: 'flex-end',
     backgroundColor: '#FFB347',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 5,
   },
   clearFiltersText: {
     color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
-  listContainer: {
-    padding: 15,
+  rightActions: {
+    alignItems: 'flex-end',
+  },
+  addButton: {
+    backgroundColor: '#FFB347',
+    borderRadius: 16,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addIcon: {
+    fontSize: 20,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  deleteButton: {
+    backgroundColor: '#FF6B6B',
+    borderRadius: 16,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteIcon: {
+    fontSize: 18,
+    color: '#FFFFFF',
+    fontWeight: '900',
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  content: {
+    flex: 1,
+    paddingTop: 10,
+  },
+  sectionHeader: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333333',
+    paddingHorizontal: 15,
+    marginBottom: 15,
+  },
+  listContent: {
     paddingBottom: 20,
   },
-  row: {
-    justifyContent: 'space-between',
-  },
-  recipeCardContainer: {
-    flex: 0.48,
-  },
-  recipeCardRight: {
-    marginLeft: '4%',
-  },
-  emptyContainer: {
+  emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
     paddingVertical: 60,
   },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  emptyTitle: {
+  emptyStateText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333333',
-    marginBottom: 8,
+    color: '#666666',
+    marginBottom: 10,
     textAlign: 'center',
   },
-  emptyText: {
+  emptyStateSubtext: {
     fontSize: 16,
-    color: '#666666',
+    color: '#999999',
     textAlign: 'center',
     lineHeight: 22,
   },

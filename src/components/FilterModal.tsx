@@ -1,69 +1,82 @@
 // src/components/FilterModal.tsx
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
-import { useMealStore, foodCategories, foodTypes, allergens } from '../stores/mealStore';
+
+// Import tags database with fallback
+let tagsDatabase: any;
+try {
+  tagsDatabase = require('../data/tagsDatabase').tagsDatabase;
+} catch (error) {
+  // Fallback database
+  tagsDatabase = {
+    categories: ['Breakfast', 'Lunch', 'Dinner', 'Snack'],
+    foodTypes: ['Fish', 'Chicken', 'Pork', 'Beef', 'Vegetarian', 'Vegan'],
+    allergens: ['Gluten', 'Dairy', 'Nuts', 'Eggs', 'Soy', 'Shellfish']
+  };
+}
 
 interface FilterModalProps {
   visible: boolean;
   onClose: () => void;
+  onApply: (filters: {
+    categories: string[];
+    foodTypes: string[];
+    allergens: string[];
+  }) => void;
+  initialCategories: string[];
+  initialFoodTypes: string[];
+  initialAllergens: string[];
 }
 
-export const FilterModal: React.FC<FilterModalProps> = ({ visible, onClose }) => {
-  const {
-    selectedCategories,
-    selectedFoodTypes,
-    selectedAllergens,
-    setSelectedCategories,
-    setSelectedFoodTypes,
-    setSelectedAllergens,
-    clearFilters
-  } = useMealStore();
+export const FilterModal: React.FC<FilterModalProps> = ({
+  visible,
+  onClose,
+  onApply,
+  initialCategories,
+  initialFoodTypes,
+  initialAllergens
+}) => {
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(initialCategories);
+  const [selectedFoodTypes, setSelectedFoodTypes] = useState<string[]>(initialFoodTypes);
+  const [selectedAllergens, setSelectedAllergens] = useState<string[]>(initialAllergens);
 
-  // Local state for filters (applied on confirm)
-  const [localCategories, setLocalCategories] = useState<string[]>([]);
-  const [localFoodTypes, setLocalFoodTypes] = useState<string[]>([]);
-  const [localAllergens, setLocalAllergens] = useState<string[]>([]);
-
-  // Update local state when modal opens
   useEffect(() => {
     if (visible) {
-      setLocalCategories([...selectedCategories]);
-      setLocalFoodTypes([...selectedFoodTypes]);
-      setLocalAllergens([...selectedAllergens]);
+      setSelectedCategories(initialCategories);
+      setSelectedFoodTypes(initialFoodTypes);
+      setSelectedAllergens(initialAllergens);
     }
-  }, [visible, selectedCategories, selectedFoodTypes, selectedAllergens]);
+  }, [visible, initialCategories, initialFoodTypes, initialAllergens]);
 
-  const toggleSelection = (item: string, selected: string[], setSelected: (items: string[]) => void) => {
-    if (selected.includes(item)) {
-      setSelected(selected.filter(i => i !== item));
+  const toggleSelection = (item: string, list: string[], setList: (list: string[]) => void) => {
+    if (list.includes(item)) {
+      setList(list.filter(i => i !== item));
     } else {
-      setSelected([...selected, item]);
+      setList([...list, item]);
     }
   };
 
-  const applyFilters = () => {
-    setSelectedCategories(localCategories);
-    setSelectedFoodTypes(localFoodTypes);
-    setSelectedAllergens(localAllergens);
+  const handleApply = () => {
+    onApply({
+      categories: selectedCategories,
+      foodTypes: selectedFoodTypes,
+      allergens: selectedAllergens
+    });
     onClose();
   };
 
-  const clearAllFilters = () => {
-    setLocalCategories([]);
-    setLocalFoodTypes([]);
-    setLocalAllergens([]);
-    clearFilters();
-    onClose();
+  const handleClear = () => {
+    setSelectedCategories([]);
+    setSelectedFoodTypes([]);
+    setSelectedAllergens([]);
   };
-
-  const hasAnyFilters = localCategories.length > 0 || localFoodTypes.length > 0 || localAllergens.length > 0;
 
   const FilterSection: React.FC<{
     title: string;
     items: string[];
     selected: string[];
-    setSelected: (items: string[]) => void;
-  }> = ({ title, items, selected, setSelected }) => (
+    onToggle: (item: string) => void;
+  }> = ({ title, items, selected, onToggle }) => (
     <View style={styles.filterSection}>
       <Text style={styles.filterTitle}>{title}</Text>
       <View style={styles.filterItemsContainer}>
@@ -74,7 +87,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({ visible, onClose }) =>
               styles.filterItem,
               selected.includes(item) && styles.selectedFilterItem
             ]}
-            onPress={() => toggleSelection(item, selected, setSelected)}
+            onPress={() => onToggle(item)}
           >
             <Text style={[
               styles.filterItemText,
@@ -98,51 +111,41 @@ export const FilterModal: React.FC<FilterModalProps> = ({ visible, onClose }) =>
       <View style={styles.modalContainer}>
         <View style={styles.modalContent}>
           <View style={styles.header}>
-            <Text style={styles.title}>Filter Recipes</Text>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
               <Text style={styles.closeText}>✕</Text>
             </TouchableOpacity>
+            <Text style={styles.title}>Filter Recipes</Text>
+            <TouchableOpacity style={styles.clearButton} onPress={handleClear}>
+              <Text style={styles.clearText}>Clear</Text>
+            </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-            <FilterSection 
-              title="Categories" 
-              items={foodCategories} 
-              selected={localCategories} 
-              setSelected={setLocalCategories} 
+          <ScrollView style={styles.scrollContent}>
+            <FilterSection
+              title="Categories"
+              items={tagsDatabase.categories}
+              selected={selectedCategories}
+              onToggle={(item) => toggleSelection(item, selectedCategories, setSelectedCategories)}
             />
-            
-            <FilterSection 
-              title="Food Types" 
-              items={foodTypes} 
-              selected={localFoodTypes} 
-              setSelected={setLocalFoodTypes} 
+
+            <FilterSection
+              title="Food Types"
+              items={tagsDatabase.foodTypes}
+              selected={selectedFoodTypes}
+              onToggle={(item) => toggleSelection(item, selectedFoodTypes, setSelectedFoodTypes)}
             />
-            
-            <FilterSection 
-              title="Allergens to Avoid" 
-              items={allergens} 
-              selected={localAllergens} 
-              setSelected={setLocalAllergens} 
+
+            <FilterSection
+              title="Exclude Allergens"
+              items={tagsDatabase.allergens}
+              selected={selectedAllergens}
+              onToggle={(item) => toggleSelection(item, selectedAllergens, setSelectedAllergens)}
             />
           </ScrollView>
 
-          <View style={styles.buttonContainer}>
-            {hasAnyFilters && (
-              <TouchableOpacity style={styles.clearButton} onPress={clearAllFilters}>
-                <Text style={styles.clearButtonText}>Clear All</Text>
-              </TouchableOpacity>
-            )}
-            
-            <TouchableOpacity 
-              style={[styles.applyButton, !hasAnyFilters && styles.applyButtonFull]} 
-              onPress={applyFilters}
-            >
-              <Text style={styles.applyButtonText}>
-                {hasAnyFilters ? 'Apply Filters' : 'Close'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
+            <Text style={styles.applyButtonText}>Apply Filters</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -152,9 +155,9 @@ export const FilterModal: React.FC<FilterModalProps> = ({ visible, onClose }) =>
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
@@ -162,25 +165,12 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '90%',
     maxHeight: '80%',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333333',
   },
   closeButton: {
     padding: 5,
@@ -189,14 +179,27 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#666666',
   },
-  scrollContainer: {
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333333',
+  },
+  clearButton: {
+    padding: 5,
+  },
+  clearText: {
+    fontSize: 16,
+    color: '#FFB347',
+    fontWeight: '600',
+  },
+  scrollContent: {
     maxHeight: 400,
   },
   filterSection: {
     marginBottom: 25,
   },
   filterTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333333',
     marginBottom: 12,
@@ -208,57 +211,35 @@ const styles = StyleSheet.create({
   },
   filterItem: {
     backgroundColor: '#F0F0F0',
-    borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: 'transparent',
   },
   selectedFilterItem: {
     backgroundColor: '#FFB347',
-    borderColor: '#FFB347',
+    borderColor: '#FF8C00',
   },
   filterItemText: {
     fontSize: 14,
-    color: '#666666',
+    color: '#333333',
     fontWeight: '500',
   },
   selectedFilterItemText: {
     color: '#FFFFFF',
     fontWeight: '600',
   },
-  buttonContainer: {
-    flexDirection: 'row',
-    marginTop: 20,
-    gap: 10,
-  },
-  clearButton: {
-    flex: 1,
-    backgroundColor: '#F0F0F0',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  clearButtonText: {
-    fontSize: 16,
-    color: '#666666',
-    fontWeight: '600',
-  },
   applyButton: {
-    flex: 1,
     backgroundColor: '#FFB347',
-    paddingVertical: 12,
+    paddingVertical: 15,
     borderRadius: 8,
     alignItems: 'center',
-  },
-  applyButtonFull: {
-    flex: 1,
+    marginTop: 10,
   },
   applyButtonText: {
-    fontSize: 16,
     color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });
