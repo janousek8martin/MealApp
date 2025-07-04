@@ -43,16 +43,34 @@ export const MealPreferencesModal: React.FC<MealPreferencesModalProps> = ({
     if (increment && mealsPerDay < 6) {
       setMealsPerDay(mealsPerDay + 1);
     } else if (!increment && mealsPerDay > 1) {
-      setMealsPerDay(mealsPerDay - 1);
+      const newMealsPerDay = mealsPerDay - 1;
+      setMealsPerDay(newMealsPerDay);
+      
+      // Clear snack positions if meals become less than 4
+      if (newMealsPerDay < 4) {
+        setSelectedSnackPositions([]);
+      } else {
+        // Trim snack positions if exceeding new limit
+        const maxSnacks = newMealsPerDay - 3;
+        setSelectedSnackPositions(prev => prev.slice(0, maxSnacks));
+      }
     }
   };
 
   const handleSnackPositionToggle = (position: string) => {
+    if (mealsPerDay < 4) return; // Disable interaction when less than 4 meals
+    
     setSelectedSnackPositions(prev => {
+      const maxSnacks = mealsPerDay - 3; // 4 meals = 1 snack, 5 meals = 2 snacks, 6 meals = 3 snacks
+      
       if (prev.includes(position)) {
         return prev.filter(p => p !== position);
       } else {
-        return [...prev, position];
+        // Only allow adding if under the limit
+        if (prev.length < maxSnacks) {
+          return [...prev, position];
+        }
+        return prev; // Don't add if at limit
       }
     });
   };
@@ -95,10 +113,6 @@ export const MealPreferencesModal: React.FC<MealPreferencesModalProps> = ({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={styles.subtitle}>
-              Configure your daily meal structure:
-            </Text>
-
             {/* Meals Per Day */}
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>Meals Per Day</Text>
@@ -124,64 +138,59 @@ export const MealPreferencesModal: React.FC<MealPreferencesModalProps> = ({
                   <Icon name="add" size={24} color={mealsPerDay >= 6 ? '#CCC' : '#FFB347'} />
                 </TouchableOpacity>
               </View>
-              
-              <Text style={styles.mealBreakdown}>
-                {getMealBreakdown()}
-              </Text>
             </View>
 
             {/* Snack Positions */}
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>Snack Positions</Text>
-              <Text style={styles.sectionDescription}>
-                Select when you prefer to have snacks:
+              <Text style={[styles.sectionDescription, mealsPerDay < 4 && styles.disabledText]}>
+                {mealsPerDay < 4 
+                  ? 'To select snack positions, you need at least 4 meals per day'
+                  : `Select when you prefer to have snacks (max ${mealsPerDay - 3}):`
+                }
               </Text>
               
               <View style={styles.snackPositionsContainer}>
-                {snackPositions.map((position, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.snackPositionButton,
-                      selectedSnackPositions.includes(position.key) && styles.selectedSnackPositionButton
-                    ]}
-                    onPress={() => handleSnackPositionToggle(position.key)}
-                  >
-                    <Icon 
-                      name={position.icon} 
-                      size={20} 
-                      color={selectedSnackPositions.includes(position.key) ? '#FFFFFF' : '#FFB347'} 
-                    />
-                    <Text style={[
-                      styles.snackPositionButtonText,
-                      selectedSnackPositions.includes(position.key) && styles.selectedSnackPositionButtonText
-                    ]}>
-                      {position.label}
-                    </Text>
-                    {selectedSnackPositions.includes(position.key) && (
-                      <Icon name="check" size={20} color="#FFFFFF" />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Summary */}
-            <View style={styles.summaryContainer}>
-              <Text style={styles.summaryTitle}>Summary</Text>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Total meals per day:</Text>
-                <Text style={styles.summaryValue}>{mealsPerDay}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Main meals:</Text>
-                <Text style={styles.summaryValue}>3 (Breakfast, Lunch, Dinner)</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Snacks:</Text>
-                <Text style={styles.summaryValue}>
-                  {selectedSnackPositions.length} ({selectedSnackPositions.join(', ') || 'None'})
-                </Text>
+                {snackPositions.map((position, index) => {
+                  const maxSnacks = mealsPerDay - 3;
+                  const isSelected = selectedSnackPositions.includes(position.key);
+                  const canSelect = mealsPerDay >= 4 && (isSelected || selectedSnackPositions.length < maxSnacks);
+                  
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.snackPositionButton,
+                        isSelected && styles.selectedSnackPositionButton,
+                        !canSelect && styles.disabledSnackPositionButton
+                      ]}
+                      onPress={() => canSelect && handleSnackPositionToggle(position.key)}
+                      disabled={!canSelect}
+                    >
+                      <Icon 
+                        name={position.icon} 
+                        size={20} 
+                        color={
+                          !canSelect 
+                            ? '#CCC' 
+                            : isSelected 
+                              ? '#FFFFFF' 
+                              : '#FFB347'
+                        } 
+                      />
+                      <Text style={[
+                        styles.snackPositionButtonText,
+                        isSelected && styles.selectedSnackPositionButtonText,
+                        !canSelect && styles.disabledSnackPositionButtonText
+                      ]}>
+                        {position.label}
+                      </Text>
+                      {isSelected && canSelect && (
+                        <Icon name="check" size={20} color="#FFFFFF" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
           </ScrollView>
@@ -319,34 +328,15 @@ const styles = StyleSheet.create({
   selectedSnackPositionButtonText: {
     color: '#FFFFFF',
   },
-  summaryContainer: {
-    backgroundColor: '#E3F2FD',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 10,
+  disabledText: {
+    color: '#999999',
   },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1976D2',
-    marginBottom: 10,
+  disabledSnackPositionButton: {
+    backgroundColor: '#F0F0F0',
+    borderColor: '#E0E0E0',
   },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 5,
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: '#1976D2',
-    flex: 1,
-  },
-  summaryValue: {
-    fontSize: 14,
-    color: '#1976D2',
-    fontWeight: '600',
-    textAlign: 'right',
-    flex: 1,
+  disabledSnackPositionButtonText: {
+    color: '#CCC',
   },
   saveButton: {
     backgroundColor: '#FFB347',
