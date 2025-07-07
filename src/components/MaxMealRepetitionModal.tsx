@@ -42,27 +42,7 @@ export const MaxMealRepetitionModal: React.FC<MaxMealRepetitionModalProps> = ({
     onClose();
   };
 
-  const getRepetitionDescription = () => {
-    if (maxRepetition === 1) {
-      return 'Each meal will be unique per week';
-    } else if (maxRepetition === 7) {
-      return 'Same meal can be eaten every day';
-    } else {
-      return `Same meal can appear up to ${maxRepetition} times per week`;
-    }
-  };
 
-  const getVarietyLevel = () => {
-    if (maxRepetition <= 2) {
-      return { level: 'High Variety', color: '#4CAF50', description: 'Maximum meal diversity' };
-    } else if (maxRepetition <= 4) {
-      return { level: 'Medium Variety', color: '#FFB347', description: 'Balanced variety and convenience' };
-    } else {
-      return { level: 'Low Variety', color: '#FF6B6B', description: 'More repetition, easier planning' };
-    }
-  };
-
-  const varietyInfo = getVarietyLevel();
 
   return (
     <Modal
@@ -109,26 +89,7 @@ export const MaxMealRepetitionModal: React.FC<MaxMealRepetitionModalProps> = ({
               </TouchableOpacity>
             </View>
 
-            {/* Description */}
-            <View style={styles.descriptionContainer}>
-              <Text style={styles.descriptionText}>
-                {getRepetitionDescription()}
-              </Text>
-            </View>
 
-            {/* Variety Level Indicator */}
-            <View style={styles.varietyContainer}>
-              <Text style={styles.varietyTitle}>Variety Level</Text>
-              <View style={[styles.varietyBadge, { backgroundColor: varietyInfo.color + '20' }]}>
-                <View style={[styles.varietyDot, { backgroundColor: varietyInfo.color }]} />
-                <Text style={[styles.varietyLevel, { color: varietyInfo.color }]}>
-                  {varietyInfo.level}
-                </Text>
-              </View>
-              <Text style={styles.varietyDescription}>
-                {varietyInfo.description}
-              </Text>
-            </View>
 
             {/* Quick Selection Buttons */}
             <View style={styles.quickSelectionContainer}>
@@ -277,51 +238,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666666',
     marginTop: 5,
-  },
-  descriptionContainer: {
-    backgroundColor: '#F0F8FF',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 20,
-  },
-  descriptionText: {
-    fontSize: 14,
-    color: '#1976D2',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  varietyContainer: {
-    marginBottom: 20,
-  },
-  varietyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 10,
-  },
-  varietyBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-    marginBottom: 8,
-  },
-  varietyDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  varietyLevel: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  varietyDescription: {
-    fontSize: 12,
-    color: '#666666',
-    fontStyle: 'italic',
   },
   quickSelectionContainer: {
     marginBottom: 20,
