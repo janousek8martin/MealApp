@@ -458,26 +458,30 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
     setPortionSizesModalVisible(false);
   };
 
-  const handleSaveAvoidMeals = async (avoidMeals: string[]) => {
-    if (selectedUser) {
-      const updatedUser: User = { ...selectedUser, avoidMeals };
-      
-      const updatedUsers = users.map(user => 
-        user.id === selectedUser.id ? updatedUser : user
-      );
-      
-      setUsers(updatedUsers);
-      setSelectedUser(updatedUser);
-      
-      try {
-        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
-      } catch (error) {
-        console.error('Error saving avoid meals:', error);
-      }
-    }
-    setAvoidMealsModalVisible(false);
+  const handleSaveAvoidMeals = async (avoidData: { foodTypes: string[]; allergens: string[]; }) => {
+  if (!selectedUser) return;
+  
+  const updatedUser: User = { 
+    ...selectedUser, 
+    avoidMeals: avoidData.foodTypes
   };
+  
+  const updatedUsers = users.map(user => 
+    user.id === selectedUser.id ? updatedUser : user
+  );
+  
+  setUsers(updatedUsers);
+  setSelectedUser(updatedUser);
+  
+  try {
+    await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
+    await AsyncStorage.setItem('selectedUserId', updatedUser.id);
+  } catch (error) {
+    console.error('Error saving avoid meals:', error);
+  }
+  
+  setAvoidMealsModalVisible(false);
+};
 
   const handleSaveMaxMealRepetition = async (maxRepetition: number) => {
     if (selectedUser) {
@@ -523,36 +527,36 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
   };
 
   const handleDeleteProfile = () => {
-    if (!selectedUser) return;
-    
-    Alert.alert(
-      'Delete Profile',
-      `Are you sure you want to delete ${selectedUser.name}'s profile? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: async () => {
-            const updatedUsers = users.filter(user => user.id !== selectedUser.id);
-            setUsers(updatedUsers);
-            setSelectedUser(updatedUsers.length > 0 ? updatedUsers[0] : null);
-            
-            try {
-              await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-              if (updatedUsers.length > 0) {
-                await AsyncStorage.setItem('selectedUserId', updatedUsers[0].id);
-              } else {
-                await AsyncStorage.removeItem('selectedUserId');
-              }
-            } catch (error) {
-              console.error('Error deleting profile:', error);
+  if (!selectedUser) return;
+  
+  Alert.alert(
+    'Delete Profile',
+    `Are you sure you want to delete ${selectedUser.name}'s profile? This action cannot be undone.`,
+    [
+      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Delete', 
+        style: 'destructive',
+        onPress: async () => {
+          const updatedUsers = users.filter(user => user.id !== selectedUser.id);
+          setUsers(updatedUsers);
+          setSelectedUser(updatedUsers.length > 0 ? updatedUsers[0] : null);
+          
+          try {
+            await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
+            if (updatedUsers.length > 0) {
+              await AsyncStorage.setItem('selectedUserId', updatedUsers[0].id);
+            } else {
+              await AsyncStorage.removeItem('selectedUserId');
             }
+          } catch (error) {
+            console.error('Error deleting profile:', error);
           }
         }
-      ]
-    );
-  };
+      }
+    ]
+  );
+};
 
   const getDisplayValue = (field: string) => {
     if (!selectedUser) return 'Not set';
@@ -726,7 +730,9 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
         </View>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView style={styles.content}
+  contentContainerStyle={{ paddingBottom: 100 }}
+>
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Loading...</Text>
@@ -852,14 +858,15 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
 
             {/* Delete Profile Button */}
             <View style={styles.deleteSection}>
-              <Button
-                title="Delete Profile"
-                onPress={handleDeleteProfile}
-                variant="secondary"
-                size="large"
-                style={styles.deleteButton}
-              />
-            </View>
+        <Button
+          title="Delete Profile"
+          onPress={handleDeleteProfile}
+          variant="danger"
+          size="large"
+          style={styles.deleteButton}
+        />
+      </View>
+
           </>
         )}
       </ScrollView>
@@ -1121,15 +1128,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   deleteSection: {
-    marginTop: 32,
-    paddingTop: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-  },
-  deleteButton: {
-    backgroundColor: '#FF6B6B',
-    borderColor: '#FF6B6B',
-  },
+  paddingTop: 24,
+  borderTopWidth: 1,
+  borderTopColor: '#E0E0E0',
+},
+deleteButton: {
+  backgroundColor: '#FF4444',
+  borderColor: '#FF4444',
+},
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

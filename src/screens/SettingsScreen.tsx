@@ -20,10 +20,6 @@ export const SettingsScreen: React.FC = () => {
     console.log('Nutrition Goals pressed');
   };
 
-  const handleMealPreferences = () => {
-    console.log('Meal Preferences pressed');
-  };
-
   const handleUnitsSettings = () => {
     console.log('Units Settings pressed');
   };
@@ -57,14 +53,7 @@ export const SettingsScreen: React.FC = () => {
             size="large"
             style={styles.settingButton}
           />
-          
-          <Button
-            title="🍽️ Meal Preferences"
-            onPress={handleMealPreferences}
-            variant="secondary"
-            size="large"
-            style={styles.settingButton}
-          />
+
         </View>
 
         <View style={styles.section}>
