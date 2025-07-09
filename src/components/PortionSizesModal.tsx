@@ -3,8 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Dimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useUserStore } from '../stores/userStore';
 
-const { width, height } = Dimensions.get('window');
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 interface PortionSizesModalProps {
   visible: boolean;
@@ -42,8 +43,12 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
   const [selectedSnackPercentage, setSelectedSnackPercentage] = useState<number | null>(null);
   const [userModifiedMeals, setUserModifiedMeals] = useState<Set<string>>(new Set());
 
+  // Get user from store if currentUser is not provided
+  const selectedUser = useUserStore(state => state.selectedUser);
+  const user = currentUser || selectedUser;
+
   // Calculate adjusted TDCI
-  const adjustedTDCI = currentUser?.tdci?.adjustedTDCI || 2000;
+  const adjustedTDCI = user?.tdci?.adjustedTDCI || 2000;
 
   useEffect(() => {
     if (visible) {
@@ -52,12 +57,12 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
         loadMealData();
       }, 100);
     }
-  }, [visible, currentUser]);
+  }, [visible, user]);
 
   // Load meal data from storage
   const loadMealData = async () => {
     try {
-      const savedMealData = await AsyncStorage.getItem(`mealData_${currentUser?.id}`);
+      const savedMealData = await AsyncStorage.getItem(`mealData_${user?.id}`);
       if (savedMealData) {
         const parsedMealData = JSON.parse(savedMealData);
         // Update with current user's snack positions
@@ -74,7 +79,7 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
   // Save meal data to storage
   const saveMealDataToStorage = async (data: MealData[]) => {
     try {
-      await AsyncStorage.setItem(`mealData_${currentUser?.id}`, JSON.stringify(data));
+      await AsyncStorage.setItem(`mealData_${user?.id}`, JSON.stringify(data));
     } catch (error) {
       console.error('Error saving meal data:', error);
     }
@@ -82,7 +87,7 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
 
   // Update snacks based on current user preferences
   const updateSnacksInData = (currentMealData: MealData[]) => {
-    const snackPositions = currentUser?.mealPreferences?.snackPositions || [];
+    const snackPositions = user?.mealPreferences?.snackPositions || [];
     const mainMeals = currentMealData.filter(meal => ['Breakfast', 'Lunch', 'Dinner'].includes(meal.name));
     let newMealData = [...mainMeals];
 
@@ -127,8 +132,8 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
 
   // Functions from MacronutrientRatiosModal
   const calculateLBM = () => {
-    const weight = parseFloat(currentUser?.weight) || 0;
-    const bodyFat = parseFloat(currentUser?.bodyFat) || 0;
+    const weight = parseFloat(user?.weight) || 0;
+    const bodyFat = parseFloat(user?.bodyFat) || 0;
     return weight * (1 - bodyFat / 100);
   };
 
@@ -156,8 +161,8 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
   };
 
   const calculateDailyMacros = () => {
-    const bodyFat = parseFloat(currentUser?.bodyFat) || 15;
-    const gender = currentUser?.gender || 'Male';
+    const bodyFat = parseFloat(user?.bodyFat) || 15;
+    const gender = user?.gender || 'Male';
 
     const lbm = calculateLBM();
     const proteinMultiplier = calculateProteinMultiplier(bodyFat, gender);
@@ -185,7 +190,7 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
 
   const resetMealData = () => {
     // Get snack positions from current user
-    const snackPositions = currentUser?.mealPreferences?.snackPositions || [];
+    const snackPositions = user?.mealPreferences?.snackPositions || [];
 
     // Define meal order for proper sorting
     const mealOrder = [
@@ -686,8 +691,8 @@ const styles = StyleSheet.create({
   modalContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    width: width * 0.9,
-    height: height * 0.7,
+    width: screenWidth * 0.9,
+    height: screenHeight * 0.7,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,

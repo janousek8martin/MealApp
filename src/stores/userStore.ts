@@ -1,47 +1,265 @@
+// src/stores/userStore.ts
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface User {
   id: string;
   name: string;
-  age?: number;
-  gender?: 'Male' | 'Female';
-  height?: number; // cm
-  weight?: number; // kg
-  bodyFat?: number; // %
-  activityLevel?: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
+  age?: string;
+  gender?: string;
+  height?: string;
+  heightUnit?: 'cm' | 'ft';
+  heightFeet?: string;
+  heightInches?: string;
+  weight?: string;
+  weightUnit?: 'kg' | 'lbs';
+  bodyFat?: string;
+  goalWeight?: string;
+  goalBodyFat?: string;
+  activityMultiplier?: number;
+  fitnessGoal?: {
+    goal: string;
+    fitnessLevel?: string | null;
+    calorieValue: string;
+  };
+  tdci?: {
+    baseTDCI: number;
+    adjustedTDCI: number;
+    weightChange: number;
+    manualAdjustment: number;
+  };
+  macronutrients?: {
+    protein: number;
+    fat: number;
+    carbs: number;
+    proteinPercentage: number;
+    fatPercentage: number;
+    carbsPercentage: number;
+  };
+  workoutDays?: string[];
+  mealPreferences?: {
+    mealsPerDay: number;
+    snackPositions: string[];
+  };
+  portionSizes?: {
+    [key: string]: number;
+  };
+  avoidMeals?: string[];
+  maxMealRepetition?: number;
 }
 
 interface UserStore {
   users: User[];
   selectedUser: User | null;
-  setSelectedUser: (user: User) => void;
-  addUser: (user: User) => void;
-  updateUser: (id: string, updates: Partial<User>) => void;
+  isLoading: boolean;
+  
+  // Actions
+  setSelectedUser: (user: User | null) => void;
+  addUser: (user: User) => Promise<void>;
+  updateUser: (id: string, updates: Partial<User>) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
+  loadUsers: () => Promise<void>;
+  
+  // Helper methods
+  getUserById: (id: string) => User | undefined;
 }
 
-// Default users for demo
-const defaultUsers: User[] = [
-  { id: '1', name: 'John Doe', age: 30, gender: 'Male', height: 180, weight: 75 },
-  { id: '2', name: 'Jane Smith', age: 28, gender: 'Female', height: 165, weight: 60 },
-  { id: '3', name: 'Mike Johnson', age: 35, gender: 'Male', height: 175, weight: 80 },
-];
+const STORAGE_KEYS = {
+  USERS: 'app_users',
+  SELECTED_USER_ID: 'selected_user_id',
+};
 
-export const useUserStore = create<UserStore>((set) => ({
-  users: defaultUsers,
-  selectedUser: defaultUsers[0],
+// Migration function moved outside of create
+const migrateFromOldStorage = async () => {
+  try {
+    // Check if we already have users in new format
+    const existingUsers = await AsyncStorage.getItem(STORAGE_KEYS.USERS);
+    if (existingUsers) return;
+    
+    // Try to migrate from ProfileSettingsScreen format
+    const profileUsers = await AsyncStorage.getItem('profileUsers');
+    const selectedUserId = await AsyncStorage.getItem('selectedUserId');
+    
+    if (profileUsers) {
+      const parsedUsers = JSON.parse(profileUsers);
+      await AsyncStorage.setItem(STORAGE_KEYS.USERS, profileUsers);
+      
+      if (selectedUserId) {
+        await AsyncStorage.setItem(STORAGE_KEYS.SELECTED_USER_ID, selectedUserId);
+      }
+      
+      // Clean up old storage
+      await AsyncStorage.removeItem('profileUsers');
+      await AsyncStorage.removeItem('selectedUserId');
+      
+      console.log('Migrated users from old ProfileSettings storage');
+      return;
+    }
+    
+    // Try to migrate from MealPlanner format
+    const userData = await AsyncStorage.getItem('userData');
+    const lastSelectedProfileId = await AsyncStorage.getItem('lastSelectedProfileId');
+    
+    if (userData) {
+      const parsedData = JSON.parse(userData);
+      const migratedUsers = Object.keys(parsedData).map(key => ({
+        id: key,
+        name: parsedData[key].name || key,
+        ...parsedData[key]
+      }));
+      
+      await AsyncStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(migratedUsers));
+      
+      if (lastSelectedProfileId) {
+        await AsyncStorage.setItem(STORAGE_KEYS.SELECTED_USER_ID, lastSelectedProfileId);
+      }
+      
+      // Clean up old storage
+      await AsyncStorage.removeItem('userData');
+      await AsyncStorage.removeItem('lastSelectedProfileId');
+      
+      console.log('Migrated users from old MealPlanner storage');
+    }
+  } catch (error) {
+    console.error('Error during migration:', error);
+  }
+};
+
+export const useUserStore = create<UserStore>((set, get) => ({
+  users: [],
+  selectedUser: null,
+  isLoading: true,
   
-  setSelectedUser: (user: User) => set({ selectedUser: user }),
+  setSelectedUser: async (user: User | null) => {
+    set({ selectedUser: user });
+    try {
+      if (user) {
+        await AsyncStorage.setItem(STORAGE_KEYS.SELECTED_USER_ID, user.id);
+      } else {
+        await AsyncStorage.removeItem(STORAGE_KEYS.SELECTED_USER_ID);
+      }
+    } catch (error) {
+      console.error('Error saving selected user:', error);
+    }
+  },
   
-  addUser: (user: User) => set((state) => ({
-    users: [...state.users, user]
-  })),
+  addUser: async (user: User) => {
+    const { users } = get();
+    const newUsers = [...users, user];
+    
+    set({ users: newUsers, selectedUser: user });
+    
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(newUsers));
+      await AsyncStorage.setItem(STORAGE_KEYS.SELECTED_USER_ID, user.id);
+    } catch (error) {
+      console.error('Error adding user:', error);
+    }
+  },
   
-  updateUser: (id: string, updates: Partial<User>) => set((state) => ({
-    users: state.users.map(user => 
+  updateUser: async (id: string, updates: Partial<User>) => {
+    const { users, selectedUser } = get();
+    const updatedUsers = users.map(user => 
       user.id === id ? { ...user, ...updates } : user
-    ),
-    selectedUser: state.selectedUser?.id === id 
-      ? { ...state.selectedUser, ...updates } 
-      : state.selectedUser
-  })),
+    );
+    
+    const updatedSelectedUser = selectedUser?.id === id 
+      ? { ...selectedUser, ...updates } 
+      : selectedUser;
+    
+    set({ 
+      users: updatedUsers, 
+      selectedUser: updatedSelectedUser 
+    });
+    
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
+    } catch (error) {
+      console.error('Error updating user:', error);
+    }
+  },
+  
+  deleteUser: async (id: string) => {
+    const { users, selectedUser } = get();
+    const newUsers = users.filter(user => user.id !== id);
+    
+    let newSelectedUser = selectedUser;
+    if (selectedUser?.id === id) {
+      newSelectedUser = newUsers.length > 0 ? newUsers[0] : null;
+    }
+    
+    set({ users: newUsers, selectedUser: newSelectedUser });
+    
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(newUsers));
+      if (newSelectedUser) {
+        await AsyncStorage.setItem(STORAGE_KEYS.SELECTED_USER_ID, newSelectedUser.id);
+      } else {
+        await AsyncStorage.removeItem(STORAGE_KEYS.SELECTED_USER_ID);
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error);
+    }
+  },
+  
+  loadUsers: async () => {
+    set({ isLoading: true });
+    
+    try {
+      const storedUsers = await AsyncStorage.getItem(STORAGE_KEYS.USERS);
+      const selectedUserId = await AsyncStorage.getItem(STORAGE_KEYS.SELECTED_USER_ID);
+      
+      if (storedUsers) {
+        const parsedUsers: User[] = JSON.parse(storedUsers);
+        let selectedUser = null;
+        
+        if (selectedUserId) {
+          selectedUser = parsedUsers.find(user => user.id === selectedUserId) || 
+                        (parsedUsers.length > 0 ? parsedUsers[0] : null);
+        } else if (parsedUsers.length > 0) {
+          selectedUser = parsedUsers[0];
+          await AsyncStorage.setItem(STORAGE_KEYS.SELECTED_USER_ID, parsedUsers[0].id);
+        }
+        
+        set({ 
+          users: parsedUsers, 
+          selectedUser,
+          isLoading: false 
+        });
+      } else {
+        // If no users exist, try migration
+        await migrateFromOldStorage();
+        
+        // Try loading again after migration
+        const migratedUsers = await AsyncStorage.getItem(STORAGE_KEYS.USERS);
+        if (migratedUsers) {
+          const parsedUsers: User[] = JSON.parse(migratedUsers);
+          const selectedUserId = await AsyncStorage.getItem(STORAGE_KEYS.SELECTED_USER_ID);
+          let selectedUser = null;
+          
+          if (selectedUserId) {
+            selectedUser = parsedUsers.find(user => user.id === selectedUserId) || parsedUsers[0];
+          } else if (parsedUsers.length > 0) {
+            selectedUser = parsedUsers[0];
+            await AsyncStorage.setItem(STORAGE_KEYS.SELECTED_USER_ID, parsedUsers[0].id);
+          }
+          
+          set({ 
+            users: parsedUsers, 
+            selectedUser,
+            isLoading: false 
+          });
+        } else {
+          set({ isLoading: false });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading users:', error);
+      set({ isLoading: false });
+    }
+  },
+  
+  getUserById: (id: string) => {
+    return get().users.find(user => user.id === id);
+  },
 }));

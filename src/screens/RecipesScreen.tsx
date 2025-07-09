@@ -203,7 +203,7 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ navigation }) => {
       <View style={[styles.statusBarSeparator, { paddingTop: insets.top }]} />
       
       {/* Top Header with Tab Navigation */}
-      <View style={styles.topHeader}>
+      <View style={styles.header}>
         <View style={styles.tabContainer}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'Recipes' && styles.activeTab]}
@@ -334,10 +334,8 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',

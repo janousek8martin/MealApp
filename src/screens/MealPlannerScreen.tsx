@@ -49,7 +49,7 @@ function UserDropdown() {
   );
 }
 
-export const MealPlannerScreen: React.FC = () => {
+const MealPlannerScreen: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekDates, setWeekDates] = useState(() => getWeekDates(new Date()));
   const insets = useSafeAreaInsets();
@@ -238,3 +238,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+export default MealPlannerScreen;
