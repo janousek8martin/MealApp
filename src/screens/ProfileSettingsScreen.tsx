@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Button } from '../components/Button';
 import { PersonalInfoModal } from '../components/PersonalInfoModal';
@@ -13,83 +12,28 @@ import { ProgressionGraphModal } from '../components/ProgressionGraphModal';
 import { ActivityMultiplierModal } from '../components/ActivityMultiplierModal';
 import { FitnessGoalsModal } from '../components/FitnessGoalsModal'; 
 import { TotalDailyCalorieModal } from '../components/TotalDailyCalorieModal';
-// import { MacronutrientRatiosModal } from '../components/MacronutrientRatiosModal'; // ODSTRANĚNO
 import { WorkoutDaysModal } from '../components/WorkoutDaysModal';
 import { MealPreferencesModal } from '../components/MealPreferencesModal';
 import { MaxMealRepetitionModal } from '../components/MaxMealRepetitionModal';
 import { AvoidMealsModal } from '../components/AvoidMealsModal';
 import { PortionSizesModal } from '../components/PortionSizesModal';
-
-interface User {
-  id: string;
-  name: string;
-  age?: string;
-  gender?: string;
-  height?: string;
-  heightUnit?: 'cm' | 'ft';
-  heightFeet?: string;
-  heightInches?: string;
-  weight?: string;
-  weightUnit?: 'kg' | 'lbs';
-  bodyFat?: string;
-  goalWeight?: string;
-  goalBodyFat?: string;
-  // New nutritional goals fields
-  activityMultiplier?: number;
-  fitnessGoal?: {
-    goal: string;
-    fitnessLevel?: string | null;
-    calorieValue: string;
-  };
-  tdci?: {
-    baseTDCI: number;
-    adjustedTDCI: number;
-    weightChange: number;
-    manualAdjustment: number;
-  };
-  macronutrients?: {
-    protein: number;
-    fat: number;
-    carbs: number;
-    proteinPercentage: number;
-    fatPercentage: number;
-    carbsPercentage: number;
-  };
-  // New Meal Plan Preferences fields
-  workoutDays?: string[];
-  mealPreferences?: {
-    mealsPerDay: number;
-    snackPositions: string[];
-  };
-  portionSizes?: {
-    [key: string]: number;
-  };
-  avoidMeals?: string[];
-  maxMealRepetition?: number;
-}
+import { useUserStore, User } from '../stores/userStore';
 
 interface ProfileSettingsScreenProps {
   onBack: () => void;
 }
 
-function UserDropdown({ users, selectedUser, onSelectUser, onAddUser }: {
+function UserDropdown({ users, selectedUser, setSelectedUser, onAddUser }: {
   users: User[];
   selectedUser: User | null;
-  onSelectUser: (user: User) => void;
+  setSelectedUser: (user: User) => void;
   onAddUser: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleSelectUser = async (user: User) => {
-    onSelectUser(user);
+  const handleSelectUser = (user: User) => {
+    setSelectedUser(user);
     setIsOpen(false);
-    
-    // Save selected user immediately
-    try {
-      await AsyncStorage.setItem('selectedUserId', user.id);
-    } catch (error) {
-      console.error('Error saving selected user:', error);
-    }
   };
 
   return (
@@ -137,11 +81,21 @@ function UserDropdown({ users, selectedUser, onSelectUser, onAddUser }: {
 
 export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ onBack }) => {
   const insets = useSafeAreaInsets();
-  const [users, setUsers] = useState<User[]>([]);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  
+  // Using useUserStore
+  const { 
+    users, 
+    selectedUser, 
+    isLoading,
+    setSelectedUser, 
+    addUser, 
+    updateUser, 
+    deleteUser
+  } = useUserStore();
+  
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState<'name' | 'age' | 'gender' | 'height' | 'weight'>('name');
-  const [isLoading, setIsLoading] = useState(true);
+  
   const [weightCompositionModalVisible, setWeightCompositionModalVisible] = useState(false);
   const [goalWeightModalVisible, setGoalWeightModalVisible] = useState(false);
   const [progressionGraphModalVisible, setProgressionGraphModalVisible] = useState(false);
@@ -150,7 +104,6 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
   const [activityMultiplierModalVisible, setActivityMultiplierModalVisible] = useState(false);
   const [fitnessGoalsModalVisible, setFitnessGoalsModalVisible] = useState(false);
   const [totalDailyCalorieModalVisible, setTotalDailyCalorieModalVisible] = useState(false);
-  // const [macronutrientRatiosModalVisible, setMacronutrientRatiosModalVisible] = useState(false); // ODSTRANĚNO
   
   // New Meal Plan Preferences modal states
   const [workoutDaysModalVisible, setWorkoutDaysModalVisible] = useState(false);
@@ -163,38 +116,10 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
   const [needsTDCIUpdate, setNeedsTDCIUpdate] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, []);
-
-  useEffect(() => {
     if (selectedUser) {
       checkTDCIUpdateNeeded();
     }
   }, [selectedUser]);
-
-  const loadData = async () => {
-    try {
-      const storedUsers = await AsyncStorage.getItem('profileUsers');
-      const selectedUserId = await AsyncStorage.getItem('selectedUserId');
-      
-      if (storedUsers) {
-        const parsedUsers: User[] = JSON.parse(storedUsers);
-        setUsers(parsedUsers);
-        
-        if (selectedUserId) {
-          const foundUser = parsedUsers.find(user => user.id === selectedUserId);
-          if (foundUser) {
-            setSelectedUser(foundUser);
-          }
-        }
-      }
-      
-      setIsLoading(false);
-    } catch (error) {
-      console.error('Error loading data:', error);
-      setIsLoading(false);
-    }
-  };
 
   const calculateBMR = (user: User | null) => {
     if (!user?.age || !user?.gender || !user?.weight) return 0;
@@ -267,239 +192,81 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
 
   const handleSavePersonalInfo = async (data: any) => {
     if (selectedUser) {
-      const updatedUser = { ...selectedUser, ...data };
-      
-      const updatedUsers = users.map(user => 
-        user.id === selectedUser.id ? updatedUser : user
-      );
-      
-      setUsers(updatedUsers);
-      setSelectedUser(updatedUser);
-      
-      try {
-        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
-      } catch (error) {
-        console.error('Error saving personal info:', error);
-      }
+      await updateUser(selectedUser.id, data);
     }
     setModalVisible(false);
   };
 
   const handleSaveWeightComposition = async (data: { weight: string; weightUnit: 'kg' | 'lbs'; bodyFat: string }) => {
     if (selectedUser) {
-      const updatedUser = { ...selectedUser, ...data };
-      
-      const updatedUsers = users.map(user => 
-        user.id === selectedUser.id ? updatedUser : user
-      );
-      
-      setUsers(updatedUsers);
-      setSelectedUser(updatedUser);
-      
-      try {
-        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
-      } catch (error) {
-        console.error('Error saving weight composition:', error);
-      }
+      await updateUser(selectedUser.id, data);
     }
     setWeightCompositionModalVisible(false);
   };
 
   const handleSaveGoalWeight = async (data: { goalWeight: string; goalBodyFat: string }) => {
     if (selectedUser) {
-      const updatedUser = { ...selectedUser, ...data };
-      
-      const updatedUsers = users.map(user => 
-        user.id === selectedUser.id ? updatedUser : user
-      );
-      
-      setUsers(updatedUsers);
-      setSelectedUser(updatedUser);
-      
-      try {
-        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
-      } catch (error) {
-        console.error('Error saving goal weight:', error);
-      }
+      await updateUser(selectedUser.id, data);
     }
     setGoalWeightModalVisible(false);
   };
 
   const handleSaveActivityMultiplier = async (multiplier: number) => {
     if (selectedUser) {
-      const updatedUser: User = { ...selectedUser, activityMultiplier: multiplier };
-      
-      const updatedUsers = users.map(user => 
-        user.id === selectedUser.id ? updatedUser : user
-      );
-      
-      setUsers(updatedUsers);
-      setSelectedUser(updatedUser);
-      
-      try {
-        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
-      } catch (error) {
-        console.error('Error saving activity multiplier:', error);
-      }
+      await updateUser(selectedUser.id, { activityMultiplier: multiplier });
     }
     setActivityMultiplierModalVisible(false);
   };
 
   const handleSaveFitnessGoals = async (data: { goal: string; fitnessLevel: string | null; calorieValue: string }) => {
     if (selectedUser) {
-      const updatedUser: User = { ...selectedUser, fitnessGoal: data };
-      
-      const updatedUsers = users.map(user => 
-        user.id === selectedUser.id ? updatedUser : user
-      );
-      
-      setUsers(updatedUsers);
-      setSelectedUser(updatedUser);
-      
-      try {
-        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
-      } catch (error) {
-        console.error('Error saving fitness goals:', error);
-      }
+      await updateUser(selectedUser.id, { fitnessGoal: data });
     }
     setFitnessGoalsModalVisible(false);
   };
 
   const handleSaveTotalDailyCalorie = async (data: { baseTDCI: number; adjustedTDCI: number; weightChange: number; manualAdjustment: number }) => {
     if (selectedUser) {
-      const updatedUser = { ...selectedUser, tdci: data };
-      
-      const updatedUsers = users.map(user => 
-        user.id === selectedUser.id ? updatedUser : user
-      );
-      
-      setUsers(updatedUsers);
-      setSelectedUser(updatedUser);
-      
-      try {
-        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
-      } catch (error) {
-        console.error('Error saving total daily calorie:', error);
-      }
-      
-      // Clear the update warning after saving
-      setNeedsTDCIUpdate(false);
+      await updateUser(selectedUser.id, { tdci: data });
     }
+    
+    // Clear the update warning after saving
+    setNeedsTDCIUpdate(false);
     setTotalDailyCalorieModalVisible(false);
   };
 
   // New Meal Plan Preferences save handlers
   const handleSaveWorkoutDays = async (workoutDays: string[]) => {
     if (selectedUser) {
-      const updatedUser: User = { ...selectedUser, workoutDays };
-      
-      const updatedUsers = users.map(user => 
-        user.id === selectedUser.id ? updatedUser : user
-      );
-      
-      setUsers(updatedUsers);
-      setSelectedUser(updatedUser);
-      
-      try {
-        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
-      } catch (error) {
-        console.error('Error saving workout days:', error);
-      }
+      await updateUser(selectedUser.id, { workoutDays });
     }
     setWorkoutDaysModalVisible(false);
   };
 
-  const handleSaveMealPreferences = async (data: { mealsPerDay: number; snackPositions: string[] }) => {
+  const handleSaveMealPreferences = async (data: any) => {
     if (selectedUser) {
-      const updatedUser: User = { ...selectedUser, mealPreferences: data };
-      
-      const updatedUsers = users.map(user => 
-        user.id === selectedUser.id ? updatedUser : user
-      );
-      
-      setUsers(updatedUsers);
-      setSelectedUser(updatedUser);
-      
-      try {
-        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
-      } catch (error) {
-        console.error('Error saving meal preferences:', error);
-      }
+      await updateUser(selectedUser.id, { mealPreferences: data });
     }
     setMealPreferencesModalVisible(false);
   };
 
   const handleSavePortionSizes = async (portionSizes: { [key: string]: number }) => {
     if (selectedUser) {
-      const updatedUser: User = { ...selectedUser, portionSizes };
-      
-      const updatedUsers = users.map(user => 
-        user.id === selectedUser.id ? updatedUser : user
-      );
-      
-      setUsers(updatedUsers);
-      setSelectedUser(updatedUser);
-      
-      try {
-        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
-      } catch (error) {
-        console.error('Error saving portion sizes:', error);
-      }
+      await updateUser(selectedUser.id, { portionSizes });
     }
     setPortionSizesModalVisible(false);
   };
 
   const handleSaveAvoidMeals = async (avoidData: { foodTypes: string[]; allergens: string[]; }) => {
-  if (!selectedUser) return;
-  
-  const updatedUser: User = { 
-    ...selectedUser, 
-    avoidMeals: avoidData.foodTypes
+    if (selectedUser) {
+      await updateUser(selectedUser.id, { avoidMeals: avoidData.foodTypes });
+    }
+    setAvoidMealsModalVisible(false);
   };
-  
-  const updatedUsers = users.map(user => 
-    user.id === selectedUser.id ? updatedUser : user
-  );
-  
-  setUsers(updatedUsers);
-  setSelectedUser(updatedUser);
-  
-  try {
-    await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-    await AsyncStorage.setItem('selectedUserId', updatedUser.id);
-  } catch (error) {
-    console.error('Error saving avoid meals:', error);
-  }
-  
-  setAvoidMealsModalVisible(false);
-};
 
   const handleSaveMaxMealRepetition = async (maxRepetition: number) => {
     if (selectedUser) {
-      const updatedUser: User = { ...selectedUser, maxMealRepetition: maxRepetition };
-      
-      const updatedUsers = users.map(user => 
-        user.id === selectedUser.id ? updatedUser : user
-      );
-      
-      setUsers(updatedUsers);
-      setSelectedUser(updatedUser);
-      
-      try {
-        await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-        await AsyncStorage.setItem('selectedUserId', updatedUser.id);
-      } catch (error) {
-        console.error('Error saving max meal repetition:', error);
-      }
+      await updateUser(selectedUser.id, { maxMealRepetition: maxRepetition });
     }
     setMaxMealRepetitionModalVisible(false);
   };
@@ -508,55 +275,34 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
     Alert.prompt(
       'Add New User',
       'Enter the name for the new user:',
-      (name) => {
+      async (name) => {
         if (name && name.trim()) {
           const newUser: User = {
             id: Date.now().toString(),
             name: name.trim(),
           };
-          
-          const updatedUsers = [...users, newUser];
-          setUsers(updatedUsers);
-          setSelectedUser(newUser);
-          
-          AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-          AsyncStorage.setItem('selectedUserId', newUser.id);
+          await addUser(newUser);
         }
       }
     );
   };
 
   const handleDeleteProfile = () => {
-  if (!selectedUser) return;
-  
-  Alert.alert(
-    'Delete Profile',
-    `Are you sure you want to delete ${selectedUser.name}'s profile? This action cannot be undone.`,
-    [
-      { text: 'Cancel', style: 'cancel' },
-      { 
-        text: 'Delete', 
-        style: 'destructive',
-        onPress: async () => {
-          const updatedUsers = users.filter(user => user.id !== selectedUser.id);
-          setUsers(updatedUsers);
-          setSelectedUser(updatedUsers.length > 0 ? updatedUsers[0] : null);
-          
-          try {
-            await AsyncStorage.setItem('profileUsers', JSON.stringify(updatedUsers));
-            if (updatedUsers.length > 0) {
-              await AsyncStorage.setItem('selectedUserId', updatedUsers[0].id);
-            } else {
-              await AsyncStorage.removeItem('selectedUserId');
-            }
-          } catch (error) {
-            console.error('Error deleting profile:', error);
-          }
+    if (!selectedUser) return;
+    
+    Alert.alert(
+      'Delete Profile',
+      `Are you sure you want to delete ${selectedUser.name}'s profile? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: () => deleteUser(selectedUser.id)
         }
-      }
-    ]
-  );
-};
+      ]
+    );
+  };
 
   const getDisplayValue = (field: string) => {
     if (!selectedUser) return 'Not set';
@@ -621,15 +367,7 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
           const { mealsPerDay, snackPositions } = selectedUser.mealPreferences;
           const snacksCount = snackPositions ? snackPositions.length : 0;
           
-          if (mealsPerDay === 3) {
-            return '3 meals, 0 snacks';
-          } else if (mealsPerDay === 4) {
-            return `4 meals, ${snacksCount} snack`;
-          } else if (mealsPerDay >= 5) {
-            return `${mealsPerDay} meals, ${snacksCount} snack${snacksCount !== 1 ? 's' : ''}`;
-          } else {
-            return `${mealsPerDay} meals`;
-          }
+          return `${mealsPerDay} meals, ${snacksCount} snack${snacksCount !== 1 ? 's' : ''}`;
         }
         return 'Not set';
       default:
@@ -724,15 +462,13 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
           <UserDropdown 
             users={users} 
             selectedUser={selectedUser} 
-            onSelectUser={setSelectedUser}
+            setSelectedUser={setSelectedUser}
             onAddUser={handleAddUser}
           />
         </View>
       </View>
 
-      <ScrollView style={styles.content}
-  contentContainerStyle={{ paddingBottom: 100 }}
->
+      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 100 }}>
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Loading...</Text>
@@ -858,15 +594,14 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
 
             {/* Delete Profile Button */}
             <View style={styles.deleteSection}>
-        <Button
-          title="Delete Profile"
-          onPress={handleDeleteProfile}
-          variant="danger"
-          size="large"
-          style={styles.deleteButton}
-        />
-      </View>
-
+              <Button
+                title="Delete Profile"
+                onPress={handleDeleteProfile}
+                variant="danger"
+                size="large"
+                style={styles.deleteButton}
+              />
+            </View>
           </>
         )}
       </ScrollView>
@@ -967,6 +702,7 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
   );
 };
 
+// Keeping ALL original styles exactly as they were
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1128,14 +864,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   deleteSection: {
-  paddingTop: 24,
-  borderTopWidth: 1,
-  borderTopColor: '#E0E0E0',
-},
-deleteButton: {
-  backgroundColor: '#FF4444',
-  borderColor: '#FF4444',
-},
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  deleteButton: {
+    backgroundColor: '#FF4444',
+    borderColor: '#FF4444',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

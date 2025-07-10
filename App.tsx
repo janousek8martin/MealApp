@@ -1,112 +1,114 @@
 // App.tsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Text, View } from 'react-native';
+import { StatusBar } from 'react-native';
+import { Text } from 'react-native';
 
-// Screens
+// Screens 
 import { HomeScreen } from './src/screens/HomeScreen';
-import { MealPlannerScreen } from './src/screens/MealPlannerScreen';
+import MealPlannerScreen from './src/screens/MealPlannerScreen'; // default import
 import { RecipesScreen } from './src/screens/RecipesScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 
+// Stores
+import { useUserStore } from './src/stores/userStore';
+
 const Tab = createBottomTabNavigator();
 
-// Simple Tab Icon Component
-interface TabIconProps {
-  name: string;
-  color: string;
-  size: number;
-}
+const App: React.FC = () => {
+  const { loadUsers } = useUserStore();
 
-const TabIcon: React.FC<TabIconProps> = ({ name, color, size }) => (
-  <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-    <Text style={{ fontSize: size, color }}>
-      {name}
-    </Text>
-  </View>
-);
+  useEffect(() => {
+    initializeApp();
+  }, []);
 
-// Bottom Tab Navigator
-const TabNavigator = () => (
-  <Tab.Navigator
-    screenOptions={{
-      headerShown: false,
-      tabBarStyle: {
-        backgroundColor: '#FFFFFF',
-        borderTopWidth: 1,
-        borderTopColor: '#E0E0E0',
-        height: 75, // Zvětšená výška
-        paddingBottom: 10, // Zvětšený padding zespodu - posune tab bar výš
-        paddingTop: 3, // Zvětšený padding shora
-        position: 'absolute', // Absolutní pozice
-        bottom: 0, // Odsazení od spodního okraje - posune celý tab bar nahoru
-        left: 10, // Odsazení zleva
-        right: 10, // Odsazení zprava
-        borderRadius: 15, // Zaoblené rohy
-        shadowColor: '#000',
-        shadowOffset: {
-          width: 0,
-          height: 4,
-        },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 10, // Android stín
-      },
-      tabBarActiveTintColor: '#FFB347',
-      tabBarInactiveTintColor: '#999999',
-      tabBarLabelStyle: {
-        fontSize: 12,
-        fontWeight: '600',
-      },
-    }}
-  >
-    <Tab.Screen 
-      name="Home" 
-      component={HomeScreen}
-      options={{
-        tabBarIcon: ({ color, size }) => (
-          <TabIcon name="🏠" color={color} size={size} />
-        ),
-      }}
-    />
-    <Tab.Screen 
-      name="Plan Meals" 
-      component={MealPlannerScreen}
-      options={{
-        tabBarIcon: ({ color, size }) => (
-          <TabIcon name="📅" color={color} size={size} />
-        ),
-      }}
-    />
-    <Tab.Screen 
-      name="Recipes" 
-      component={RecipesScreen}
-      options={{
-        tabBarIcon: ({ color, size }) => (
-          <TabIcon name="📖" color={color} size={size} />
-        ),
-      }}
-    />
-    <Tab.Screen 
-      name="Settings" 
-      component={SettingsScreen}
-      options={{
-        tabBarIcon: ({ color, size }) => (
-          <TabIcon name="⚙️" color={color} size={size} />
-        ),
-      }}
-    />
-  </Tab.Navigator>
-);
+  const initializeApp = async () => {
+    try {
+      console.log('Initializing app...');
+      // Load users into store
+      await loadUsers();
+      console.log('Users loaded successfully');
+    } catch (error) {
+      console.error('Error initializing app:', error);
+    }
+  };
 
-export default function App() {
   return (
-    <SafeAreaProvider>
+    <>
+      <StatusBar backgroundColor="#FFB347" barStyle="light-content" />
       <NavigationContainer>
-        <TabNavigator />
+        <Tab.Navigator
+          screenOptions={({ route }) => ({
+            tabBarIcon: ({ focused, color, size }) => {
+              let emoji: string;
+
+              if (route.name === 'Home') {
+                emoji = '🏠';
+              } else if (route.name === 'Plan Meals') {
+                emoji = '📅';
+              } else if (route.name === 'Recipes') {
+                emoji = '📖';
+              } else if (route.name === 'Settings') {
+                emoji = '⚙️';
+              } else {
+                emoji = '❓';
+              }
+
+              return <Text style={{ fontSize: size }}>{emoji}</Text>;
+            },
+            tabBarActiveTintColor: '#FFB347',
+            tabBarInactiveTintColor: '#999999',
+            tabBarStyle: {
+              backgroundColor: '#FFFFFF',
+              borderTopWidth: 1,
+              borderTopColor: '#E0E0E0',
+              paddingBottom: 20,
+              height: 75,
+            },
+            tabBarLabelStyle: {
+              fontSize: 12,
+              fontWeight: '500',
+              paddingTop: 2,
+            },
+            headerShown: false,
+          })}
+        >
+          <Tab.Screen 
+            name="Home" 
+            component={HomeScreen}
+            options={{
+              tabBarLabel: 'Home',
+            }}
+          />
+          <Tab.Screen 
+            name="Plan Meals" 
+            component={MealPlannerScreen}
+            options={{
+              tabBarLabel: 'Plan Meals',
+            }}
+          />
+          <Tab.Screen 
+            name="Recipes" 
+            component={RecipesScreen}
+            options={{
+              tabBarLabel: 'Recipes',
+            }}
+          />
+          <Tab.Screen 
+            name="Settings" 
+            component={SettingsScreen}
+            options={{
+              tabBarLabel: 'Settings',
+            }}
+          />
+        </Tab.Navigator>
       </NavigationContainer>
-    </SafeAreaProvider>
+    </>
   );
-}
+};
+
+// Add displayName to prevent the error
+App.displayName = 'App';
+
+export default App;

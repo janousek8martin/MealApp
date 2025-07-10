@@ -19,6 +19,38 @@ export interface DailyMealPlanRef {
   animateToDate: (newDate: Date, direction: 'left' | 'right') => void;
 }
 
+// Helper function to check if date is today or in the future
+const isDateTodayOrFuture = (date: Date): boolean => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const checkDate = new Date(date);
+  checkDate.setHours(0, 0, 0, 0);
+  return checkDate >= today;
+};
+
+// Helper function to add snacks according to meal preferences
+const applyMealPreferencesToDate = (
+  userId: string, 
+  date: Date, 
+  mealPreferences: any, 
+  addMeal: Function
+) => {
+  if (!mealPreferences?.snackPositions || !Array.isArray(mealPreferences.snackPositions)) {
+    return;
+  }
+
+  const dateString = date.toISOString().split('T')[0];
+  
+  // Add snacks according to preferences
+  mealPreferences.snackPositions.forEach((position: string) => {
+    addMeal(userId, dateString, {
+      type: 'Snack',
+      name: 'Snack',
+      position: position
+    });
+  });
+};
+
 export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
   ({ selectedDate, onDateChange }, ref) => {
     const [showSnackModal, setShowSnackModal] = useState(false);
@@ -31,6 +63,19 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
     const selectedUser = useUserStore(state => state.selectedUser);
 
     if (!selectedUser) return null;
+
+    // Apply meal preferences when component loads for today and future dates
+    useEffect(() => {
+      if (selectedUser?.mealPreferences?.snackPositions && isDateTodayOrFuture(selectedDate)) {
+        const currentDateStr = selectedDate.toISOString().split('T')[0];
+        const mealPlan = getMealPlan(selectedUser.id, currentDateStr);
+        
+        // If no meal plan exists for this date, apply preferences
+        if (!mealPlan || !mealPlan.meals || mealPlan.meals.length === 0) {
+          applyMealPreferencesToDate(selectedUser.id, selectedDate, selectedUser.mealPreferences, addMeal);
+        }
+      }
+    }, [selectedDate, selectedUser, addMeal, getMealPlan]);
 
     // Expose animateToDate method through ref
     useImperativeHandle(ref, () => ({
@@ -96,7 +141,7 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
 
     const handleAddSnack = (positions: SnackPosition[], applyToEveryDay: boolean) => {
       if (applyToEveryDay) {
-        // Add to entire week
+        // Add to entire week (but only to today and future dates)
         const startOfWeek = new Date(selectedDate);
         const dayOfWeek = startOfWeek.getDay();
         const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -105,8 +150,23 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
         for (let i = 0; i < 7; i++) {
           const currentDate = new Date(startOfWeek);
           currentDate.setDate(startOfWeek.getDate() + i);
-          const currentDateStr = currentDate.toISOString().split('T')[0];
           
+          // Only apply to today and future dates
+          if (isDateTodayOrFuture(currentDate)) {
+            const currentDateStr = currentDate.toISOString().split('T')[0];
+            positions.forEach(position => {
+              addMeal(selectedUser.id, currentDateStr, { 
+                type: 'Snack', 
+                name: 'Snack', 
+                position 
+              });
+            });
+          }
+        }
+      } else {
+        // Add only to selected day (if it's today or future)
+        if (isDateTodayOrFuture(selectedDate)) {
+          const currentDateStr = selectedDate.toISOString().split('T')[0];
           positions.forEach(position => {
             addMeal(selectedUser.id, currentDateStr, { 
               type: 'Snack', 
@@ -115,16 +175,6 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
             });
           });
         }
-      } else {
-        // Add only to selected day
-        const currentDateStr = selectedDate.toISOString().split('T')[0];
-        positions.forEach(position => {
-          addMeal(selectedUser.id, currentDateStr, { 
-            type: 'Snack', 
-            name: 'Snack', 
-            position 
-          });
-        });
       }
       setShowSnackModal(false);
     };
@@ -294,44 +344,37 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        const SWIPE_THRESHOLD = windowWidth * 0.25; // 25% of screen width
+        const swipeThreshold = windowWidth * 0.25; // Threshold for completing swipe
         
-        if (gestureState.dx > SWIPE_THRESHOLD) {
-          // Swipe right - animate out and go to previous day
+        if (Math.abs(gestureState.dx) > swipeThreshold && Math.abs(gestureState.vx) > 0.3) {
+          // Complete the swipe
+          const direction = gestureState.dx > 0 ? 'right' : 'left';
+          const newDate = direction === 'right' ? getPreviousDay(selectedDate) : getNextDay(selectedDate);
+          
+          const targetValue = direction === 'right' ? windowWidth : -windowWidth;
+          
           Animated.timing(swipeAnimation, {
-            toValue: windowWidth,
+            toValue: targetValue,
             duration: 200,
             useNativeDriver: true,
           }).start(() => {
             if (onDateChange) {
-              onDateChange(getPreviousDay(selectedDate));
+              onDateChange(newDate);
             }
-            // Reset animation after date change and mark as not swiping
-            swipeAnimation.setValue(0);
-            isSwipingRef.current = false;
-            setPreviewDate(null);
-            setSwipeDirection(null);
-          });
-        } else if (gestureState.dx < -SWIPE_THRESHOLD) {
-          // Swipe left - animate out and go to next day
-          Animated.timing(swipeAnimation, {
-            toValue: -windowWidth,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(() => {
-            if (onDateChange) {
-              onDateChange(getNextDay(selectedDate));
-            }
-            // Reset animation after date change and mark as not swiping
-            swipeAnimation.setValue(0);
-            isSwipingRef.current = false;
-            setPreviewDate(null);
-            setSwipeDirection(null);
+            // Reset after completing the swipe
+            setTimeout(() => {
+              swipeAnimation.setValue(0);
+              isSwipingRef.current = false;
+              setPreviewDate(null);
+              setSwipeDirection(null);
+            }, 0);
           });
         } else {
-          // Snap back to original position and mark as not swiping
+          // Bounce back
           Animated.spring(swipeAnimation, {
             toValue: 0,
+            tension: 100,
+            friction: 8,
             useNativeDriver: true,
           }).start(() => {
             isSwipingRef.current = false;
@@ -340,31 +383,35 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
           });
         }
       },
-      onPanResponderTerminate: () => {
-        // Snap back if terminated and mark as not swiping
-        Animated.spring(swipeAnimation, {
-          toValue: 0,
-          useNativeDriver: true,
-        }).start(() => {
-          isSwipingRef.current = false;
-          setPreviewDate(null);
-          setSwipeDirection(null);
-        });
-      },
     });
 
     return (
-      <View style={styles.swipeContainer} {...panResponder.panHandlers}>
-        {/* Preview page (next/previous day) */}
-        {previewDate && (
+      <View style={styles.container} {...panResponder.panHandlers}>
+        <Animated.View 
+          style={[
+            styles.mealPlanContainer,
+            {
+              transform: [{ translateX: swipeAnimation }]
+            }
+          ]}
+        >
+          {renderMealPlanContent(selectedDate)}
+        </Animated.View>
+
+        {/* Preview containers */}
+        {previewDate && swipeDirection === 'right' && (
           <Animated.View 
             style={[
+              styles.mealPlanContainer,
               styles.previewContainer,
+              styles.leftPreview,
               {
-                transform: [{
-                  translateX: swipeDirection === 'right' 
-                    ? Animated.add(swipeAnimation, -windowWidth) 
-                    : Animated.add(swipeAnimation, windowWidth)
+                transform: [{ 
+                  translateX: swipeAnimation.interpolate({
+                    inputRange: [0, windowWidth * 0.8],
+                    outputRange: [-windowWidth, 0],
+                    extrapolate: 'clamp'
+                  })
                 }]
               }
             ]}
@@ -373,16 +420,28 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
           </Animated.View>
         )}
 
-        {/* Current page */}
-        <Animated.View 
-          style={[
-            styles.container, 
-            { transform: [{ translateX: swipeAnimation }] }
-          ]} 
-        >
-          {renderMealPlanContent(selectedDate, false)}
-        </Animated.View>
+        {previewDate && swipeDirection === 'left' && (
+          <Animated.View 
+            style={[
+              styles.mealPlanContainer,
+              styles.previewContainer,
+              styles.rightPreview,
+              {
+                transform: [{ 
+                  translateX: swipeAnimation.interpolate({
+                    inputRange: [-windowWidth * 0.8, 0],
+                    outputRange: [0, windowWidth],
+                    extrapolate: 'clamp'
+                  })
+                }]
+              }
+            ]}
+          >
+            {renderMealPlanContent(previewDate, true)}
+          </Animated.View>
+        )}
 
+        {/* Snack Position Modal */}
         <SnackPositionModal
           visible={showSnackModal}
           onClose={() => setShowSnackModal(false)}
@@ -394,37 +453,38 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
 );
 
 const styles = StyleSheet.create({
-  swipeContainer: {
+  container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  mealPlanContainer: {
+    flex: 1,
+    width: windowWidth,
   },
   previewContainer: {
     position: 'absolute',
     top: 0,
-    left: 0,
-    width: windowWidth,
-    height: '100%',
-    backgroundColor: '#F8F9FA',
-    opacity: 0.8,
+    bottom: 0,
+    opacity: 0.7,
   },
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
+  leftPreview: {
+    left: 0,
+  },
+  rightPreview: {
+    right: 0,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
+    paddingVertical: 15,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
   },
   dateTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#333333',
   },
@@ -436,10 +496,12 @@ const styles = StyleSheet.create({
     color: '#FFB347',
     fontWeight: 'bold',
   },
+  disabledButton: {
+    opacity: 0.5,
+  },
   content: {
     flex: 1,
-    paddingHorizontal: 15,
-    paddingTop: 10,
+    paddingHorizontal: 20,
   },
   addSnackButton: {
     backgroundColor: '#FFFFFF',
@@ -458,18 +520,16 @@ const styles = StyleSheet.create({
   },
   generateButton: {
     backgroundColor: '#FFB347',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
     borderRadius: 12,
-    padding: 20,
     alignItems: 'center',
     marginVertical: 10,
-    marginBottom: 20,
+    marginBottom: 30,
   },
   generateText: {
+    fontSize: 16,
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  disabledButton: {
-    opacity: 0.6,
+    fontWeight: '600',
   },
 });

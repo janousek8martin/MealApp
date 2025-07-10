@@ -18,6 +18,7 @@ interface MealStore {
   addMeal: (userId: string, date: string, meal: Omit<Meal, 'id' | 'userId' | 'date'>) => void;
   removeMeal: (userId: string, date: string, mealId: string) => void;
   resetDay: (userId: string, date: string) => void;
+  setMealPlans: (newMealPlans: Record<string, MealPlan>) => void;
   
   // Recipe actions
   addRecipe: (recipe: Omit<Recipe, 'id'>) => void;
@@ -60,51 +61,49 @@ const demoRecipes: Recipe[] = [
       'Continue stirring until eggs are just set',
       'Season with salt and serve immediately'
     ],
-    nutrition: { calories: 200, protein: 15, carbs: 2, fat: 14 },
-    image: 'https://via.placeholder.com/150x100/FFB347/FFFFFF?text=Eggs'
+    nutrition: { calories: 200, protein: 15, carbs: 2, fat: 14 }
   },
   {
     id: '2',
-    name: 'Chicken Salad',
-    description: 'Fresh chicken salad with mixed greens',
-    prepTime: 15,
-    cookTime: 20,
-    servings: 4,
-    categories: ['Lunch', 'Dinner'],
-    ingredients: [
-      { id: '1', name: 'Chicken Breast', amount: 500, unit: 'g' },
-      { id: '2', name: 'Mixed Greens', amount: 200, unit: 'g' },
-      { id: '3', name: 'Cherry Tomatoes', amount: 150, unit: 'g' },
-    ],
-    instructions: [
-      'Season and cook chicken breast until done',
-      'Let chicken cool and slice thinly',
-      'Combine greens and tomatoes in a bowl',
-      'Add sliced chicken and toss with dressing'
-    ],
-    nutrition: { calories: 350, protein: 30, carbs: 15, fat: 20 },
-    image: 'https://via.placeholder.com/150x100/4CAF50/FFFFFF?text=Salad'
-  },
-  {
-    id: '3',
-    name: 'Protein Smoothie',
-    description: 'Post-workout protein smoothie',
+    name: 'Avocado Toast',
+    description: 'Simple and healthy avocado toast',
     prepTime: 5,
-    cookTime: 0,
+    cookTime: 2,
     servings: 1,
     categories: ['Breakfast', 'Snack'],
     ingredients: [
-      { id: '1', name: 'Banana', amount: 1, unit: 'piece' },
-      { id: '2', name: 'Protein Powder', amount: 30, unit: 'g' },
-      { id: '3', name: 'Milk', amount: 250, unit: 'ml' },
+      { id: '1', name: 'Bread', amount: 2, unit: 'slices' },
+      { id: '2', name: 'Avocado', amount: 1, unit: 'piece' },
+      { id: '3', name: 'Salt', amount: 1, unit: 'pinch' },
     ],
     instructions: [
-      'Add all ingredients to blender',
-      'Blend until smooth',
-      'Serve immediately'
+      'Toast the bread slices',
+      'Mash the avocado in a bowl',
+      'Spread avocado on toast',
+      'Season with salt and pepper'
     ],
-    nutrition: { calories: 280, protein: 25, carbs: 35, fat: 5 },
-    image: 'https://via.placeholder.com/150x100/E91E63/FFFFFF?text=Smoothie'
+    nutrition: { calories: 250, protein: 8, carbs: 30, fat: 12 }
+  },
+  {
+    id: '3',
+    name: 'Chicken Salad',
+    description: 'Fresh chicken salad with vegetables',
+    prepTime: 15,
+    cookTime: 20,
+    servings: 2,
+    categories: ['Lunch', 'Dinner'],
+    ingredients: [
+      { id: '1', name: 'Chicken Breast', amount: 300, unit: 'g' },
+      { id: '2', name: 'Mixed Greens', amount: 100, unit: 'g' },
+      { id: '3', name: 'Tomatoes', amount: 2, unit: 'pieces' },
+    ],
+    instructions: [
+      'Cook chicken breast in a pan',
+      'Let chicken cool and slice',
+      'Mix greens and vegetables',
+      'Add chicken and dressing'
+    ],
+    nutrition: { calories: 350, protein: 35, carbs: 8, fat: 15 }
   },
   {
     id: '4',
@@ -115,18 +114,17 @@ const demoRecipes: Recipe[] = [
     servings: 4,
     categories: ['Lunch', 'Dinner'],
     ingredients: [
-      { id: '1', name: 'Spaghetti', amount: 400, unit: 'g' },
-      { id: '2', name: 'Eggs', amount: 4, unit: 'pieces' },
-      { id: '3', name: 'Bacon', amount: 200, unit: 'g' },
+      { id: '1', name: 'Pasta', amount: 400, unit: 'g' },
+      { id: '2', name: 'Bacon', amount: 150, unit: 'g' },
+      { id: '3', name: 'Eggs', amount: 3, unit: 'pieces' },
     ],
     instructions: [
-      'Cook pasta according to package directions',
+      'Cook pasta according to package instructions',
       'Fry bacon until crispy',
-      'Whisk eggs with cheese',
-      'Combine hot pasta with egg mixture and bacon'
+      'Beat eggs with cheese',
+      'Mix hot pasta with egg mixture and bacon'
     ],
-    nutrition: { calories: 450, protein: 18, carbs: 55, fat: 18 },
-    image: 'https://via.placeholder.com/150x100/FF9800/FFFFFF?text=Pasta'
+    nutrition: { calories: 450, protein: 18, carbs: 55, fat: 18 }
   },
   {
     id: '5',
@@ -146,8 +144,7 @@ const demoRecipes: Recipe[] = [
       'Top with fresh berries',
       'Drizzle with honey'
     ],
-    nutrition: { calories: 180, protein: 15, carbs: 25, fat: 3 },
-    image: 'https://via.placeholder.com/150x100/9C27B0/FFFFFF?text=Yogurt'
+    nutrition: { calories: 180, protein: 15, carbs: 25, fat: 3 }
   },
   {
     id: '6',
@@ -168,8 +165,7 @@ const demoRecipes: Recipe[] = [
       'Grill for 6 minutes per side',
       'Serve with lemon wedges'
     ],
-    nutrition: { calories: 320, protein: 35, carbs: 0, fat: 18 },
-    image: 'https://via.placeholder.com/150x100/2196F3/FFFFFF?text=Salmon'
+    nutrition: { calories: 320, protein: 35, carbs: 0, fat: 18 }
   }
 ];
 
@@ -263,6 +259,11 @@ export const useMealStore = create<MealStore>((set, get) => ({
       delete mealPlans[key];
       set({ mealPlans: { ...mealPlans } });
     }
+  },
+  
+  // 🔧 NEW METHOD: Set all meal plans at once for synchronization
+  setMealPlans: (newMealPlans: Record<string, MealPlan>) => {
+    set({ mealPlans: newMealPlans });
   },
   
   // Recipe management
