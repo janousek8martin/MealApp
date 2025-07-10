@@ -7,7 +7,7 @@ import { Text } from 'react-native';
 
 // Screens 
 import { HomeScreen } from './src/screens/HomeScreen';
-import MealPlannerScreen from './src/screens/MealPlannerScreen';
+import MealPlannerScreen from './src/screens/MealPlannerScreen'; // default import
 import { RecipesScreen } from './src/screens/RecipesScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 

@@ -14,6 +14,19 @@ interface CalendarProps {
   onNextWeek: () => void;
 }
 
+// Helper function to check if date is within allowed range (current month + previous month)
+const isDateInAllowedRange = (date: Date): boolean => {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth();
+  
+  // First day of previous month
+  const firstDayOfPreviousMonth = new Date(currentYear, currentMonth - 1, 1);
+  
+  // Date must be >= first day of previous month
+  return date >= firstDayOfPreviousMonth;
+};
+
 const MonthCalendar: React.FC<{
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
@@ -47,7 +60,15 @@ const MonthCalendar: React.FC<{
   };
 
   const goToPreviousMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
+    const newMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1);
+    
+    // Check if the new month would go beyond allowed range
+    const firstDayOfNewMonth = new Date(newMonth.getFullYear(), newMonth.getMonth(), 1);
+    if (!isDateInAllowedRange(firstDayOfNewMonth)) {
+      return; // Block navigation if it would go too far back
+    }
+    
+    setCurrentMonth(newMonth);
   };
 
   const goToNextMonth = () => {
@@ -55,6 +76,11 @@ const MonthCalendar: React.FC<{
   };
 
   const handleDateSelect = (date: Date) => {
+    // Check if date is in allowed range before selecting
+    if (!isDateInAllowedRange(date)) {
+      return;
+    }
+    
     onSelectDate(date);
     onClose();
   };
@@ -99,22 +125,26 @@ const MonthCalendar: React.FC<{
 
               const isSelected = isSameDay(selectedDate, day);
               const isCurrent = isToday(day);
+              const isAllowed = isDateInAllowedRange(day);
 
               return (
                 <TouchableOpacity
                   key={index}
                   style={styles.monthDay}
                   onPress={() => handleDateSelect(day)}
+                  disabled={!isAllowed}
                 >
                   <View style={[
                     styles.monthDayContent,
                     isSelected && styles.selectedMonthDay,
                     isCurrent && !isSelected && styles.currentMonthDay,
+                    !isAllowed && styles.disabledMonthDay,
                   ]}>
                     <Text style={[
                       styles.monthDayText,
                       isSelected && styles.selectedMonthDayText,
                       isCurrent && !isSelected && styles.currentMonthDayText,
+                      !isAllowed && styles.disabledMonthDayText,
                     ]}>
                       {day.getDate()}
                     </Text>
@@ -142,6 +172,15 @@ export const Calendar: React.FC<CalendarProps> = ({
 
   const handleTodayPress = () => {
     onSelectDate(new Date());
+  };
+
+  const handleDateSelect = (date: Date) => {
+    // Check if date is in allowed range before selecting
+    if (!isDateInAllowedRange(date)) {
+      return;
+    }
+    
+    onSelectDate(date);
   };
 
   return (
@@ -172,27 +211,32 @@ export const Calendar: React.FC<CalendarProps> = ({
           {weekDates.map((date, index) => {
             const isSelected = isSameDay(selectedDate, date);
             const isCurrent = isToday(date);
+            const isAllowed = isDateInAllowedRange(date);
             
             return (
               <TouchableOpacity
                 key={index}
                 style={styles.dayContainer}
-                onPress={() => onSelectDate(date)}
+                onPress={() => handleDateSelect(date)}
+                disabled={!isAllowed}
               >
                 <View style={[
                   styles.dateBox,
                   isSelected && styles.selectedDate,
                   isCurrent && !isSelected && styles.currentDate,
+                  !isAllowed && styles.disabledDate,
                 ]}>
                   <Text style={[
                     styles.dayText,
                     isSelected && styles.selectedText,
+                    !isAllowed && styles.disabledText,
                   ]}>
                     {date.toLocaleString('default', { weekday: 'short' }).slice(0, 3)}
                   </Text>
                   <Text style={[
                     styles.dateText,
                     isSelected && styles.selectedText,
+                    !isAllowed && styles.disabledText,
                   ]}>
                     {date.getDate()}
                   </Text>
@@ -222,24 +266,20 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: '#FFFFFF',
     paddingVertical: 15,
-    paddingHorizontal: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
   monthTitleRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 20,
     marginBottom: 15,
-    position: 'relative',
   },
   monthTitleButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
   },
   monthTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#333333',
     textAlign: 'center',
@@ -247,30 +287,25 @@ const styles = StyleSheet.create({
   dropdownArrow: {
     fontSize: 12,
     color: '#666666',
-    marginLeft: 6,
+    marginLeft: 5,
   },
   todayButton: {
-    position: 'absolute',
-    right: 0,
-    backgroundColor: 'transparent',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: '#FFB347',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  todayButtonHighlighted: {
-    position: 'absolute',
-    right: 0,
-    backgroundColor: '#FFB347',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
   },
   todayButtonText: {
     color: '#FFB347',
     fontSize: 14,
     fontWeight: '600',
+  },
+  todayButtonHighlighted: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#FFB347',
   },
   todayButtonTextHighlighted: {
     color: '#FFFFFF',
@@ -279,18 +314,17 @@ const styles = StyleSheet.create({
   },
   weekContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 10,
   },
   arrowButton: {
     padding: 10,
-    width: 40,
-    alignItems: 'center',
   },
   arrow: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FFB347',
+    color: '#333333',
   },
   daysContainer: {
     flexDirection: 'row',
@@ -299,22 +333,15 @@ const styles = StyleSheet.create({
   },
   dayContainer: {
     alignItems: 'center',
-    width: (windowWidth - 120) / 7,
+    flex: 1,
   },
   dateBox: {
     padding: 8,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 60,
-    width: '100%',
-  },
-  selectedDate: {
-    backgroundColor: '#FFB347',
-  },
-  currentDate: {
-    borderWidth: 2,
-    borderColor: '#FFB347',
+    minWidth: 44,
+    minHeight: 44,
   },
   dayText: {
     fontSize: 12,
@@ -327,8 +354,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333333',
   },
+  selectedDate: {
+    backgroundColor: '#FFB347',
+  },
+  currentDate: {
+    borderWidth: 2,
+    borderColor: '#FFB347',
+  },
+  disabledDate: {
+    opacity: 0.3,
+  },
   selectedText: {
     color: '#FFFFFF',
+  },
+  disabledText: {
+    color: '#CCCCCC',
   },
   // Month calendar styles
   monthModalOverlay: {
@@ -412,6 +452,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FFB347',
   },
+  disabledMonthDay: {
+    opacity: 0.3,
+  },
   monthDayText: {
     fontSize: 16,
     fontWeight: '500',
@@ -424,5 +467,8 @@ const styles = StyleSheet.create({
   currentMonthDayText: {
     color: '#FFB347',
     fontWeight: 'bold',
+  },
+  disabledMonthDayText: {
+    color: '#CCCCCC',
   },
 });

@@ -12,7 +12,6 @@ import { ProgressionGraphModal } from '../components/ProgressionGraphModal';
 import { ActivityMultiplierModal } from '../components/ActivityMultiplierModal';
 import { FitnessGoalsModal } from '../components/FitnessGoalsModal'; 
 import { TotalDailyCalorieModal } from '../components/TotalDailyCalorieModal';
-// import { MacronutrientRatiosModal } from '../components/MacronutrientRatiosModal'; // ODSTRANĚNO
 import { WorkoutDaysModal } from '../components/WorkoutDaysModal';
 import { MealPreferencesModal } from '../components/MealPreferencesModal';
 import { MaxMealRepetitionModal } from '../components/MaxMealRepetitionModal';
@@ -24,16 +23,16 @@ interface ProfileSettingsScreenProps {
   onBack: () => void;
 }
 
-function UserDropdown({ users, selectedUser, onSelectUser, onAddUser }: {
+function UserDropdown({ users, selectedUser, setSelectedUser, onAddUser }: {
   users: User[];
   selectedUser: User | null;
-  onSelectUser: (user: User) => void;
+  setSelectedUser: (user: User) => void;
   onAddUser: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleSelectUser = (user: User) => {
-    onSelectUser(user);
+    setSelectedUser(user);
     setIsOpen(false);
   };
 
@@ -83,7 +82,7 @@ function UserDropdown({ users, selectedUser, onSelectUser, onAddUser }: {
 export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ onBack }) => {
   const insets = useSafeAreaInsets();
   
-  // Zustand store hooks
+  // Using useUserStore
   const { 
     users, 
     selectedUser, 
@@ -91,8 +90,7 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
     setSelectedUser, 
     addUser, 
     updateUser, 
-    deleteUser,
-    loadUsers 
+    deleteUser
   } = useUserStore();
   
   const [modalVisible, setModalVisible] = useState(false);
@@ -106,7 +104,6 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
   const [activityMultiplierModalVisible, setActivityMultiplierModalVisible] = useState(false);
   const [fitnessGoalsModalVisible, setFitnessGoalsModalVisible] = useState(false);
   const [totalDailyCalorieModalVisible, setTotalDailyCalorieModalVisible] = useState(false);
-  // const [macronutrientRatiosModalVisible, setMacronutrientRatiosModalVisible] = useState(false); // ODSTRANĚNO
   
   // New Meal Plan Preferences modal states
   const [workoutDaysModalVisible, setWorkoutDaysModalVisible] = useState(false);
@@ -117,10 +114,6 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
   
   // Warning state for TDCI update
   const [needsTDCIUpdate, setNeedsTDCIUpdate] = useState(false);
-
-  useEffect(() => {
-    loadUsers();
-  }, []);
 
   useEffect(() => {
     if (selectedUser) {
@@ -250,7 +243,7 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
     setWorkoutDaysModalVisible(false);
   };
 
-  const handleSaveMealPreferences = async (data: { mealsPerDay: number; snackPositions: string[] }) => {
+  const handleSaveMealPreferences = async (data: any) => {
     if (selectedUser) {
       await updateUser(selectedUser.id, { mealPreferences: data });
     }
@@ -282,13 +275,13 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
     Alert.prompt(
       'Add New User',
       'Enter the name for the new user:',
-      (name) => {
+      async (name) => {
         if (name && name.trim()) {
           const newUser: User = {
             id: Date.now().toString(),
             name: name.trim(),
           };
-          addUser(newUser);
+          await addUser(newUser);
         }
       }
     );
@@ -374,15 +367,7 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
           const { mealsPerDay, snackPositions } = selectedUser.mealPreferences;
           const snacksCount = snackPositions ? snackPositions.length : 0;
           
-          if (mealsPerDay === 3) {
-            return '3 meals, 0 snacks';
-          } else if (mealsPerDay === 4) {
-            return `4 meals, ${snacksCount} snack`;
-          } else if (mealsPerDay >= 5) {
-            return `${mealsPerDay} meals, ${snacksCount} snack${snacksCount !== 1 ? 's' : ''}`;
-          } else {
-            return `${mealsPerDay} meals`;
-          }
+          return `${mealsPerDay} meals, ${snacksCount} snack${snacksCount !== 1 ? 's' : ''}`;
         }
         return 'Not set';
       default:
@@ -476,15 +461,13 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
           <UserDropdown 
             users={users} 
             selectedUser={selectedUser} 
-            onSelectUser={setSelectedUser}
+            setSelectedUser={setSelectedUser}
             onAddUser={handleAddUser}
           />
         </View>
       </View>
 
-      <ScrollView style={styles.content}
-  contentContainerStyle={{ paddingBottom: 100 }}
->
+      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 100 }}>
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Loading...</Text>
@@ -610,15 +593,14 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
 
             {/* Delete Profile Button */}
             <View style={styles.deleteSection}>
-        <Button
-          title="Delete Profile"
-          onPress={handleDeleteProfile}
-          variant="danger"
-          size="large"
-          style={styles.deleteButton}
-        />
-      </View>
-
+              <Button
+                title="Delete Profile"
+                onPress={handleDeleteProfile}
+                variant="danger"
+                size="large"
+                style={styles.deleteButton}
+              />
+            </View>
           </>
         )}
       </ScrollView>
@@ -719,6 +701,7 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
   );
 };
 
+// Keeping ALL original styles exactly as they were
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -880,14 +863,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   deleteSection: {
-  paddingTop: 24,
-  borderTopWidth: 1,
-  borderTopColor: '#E0E0E0',
-},
-deleteButton: {
-  backgroundColor: '#FF4444',
-  borderColor: '#FF4444',
-},
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  deleteButton: {
+    backgroundColor: '#FF4444',
+    borderColor: '#FF4444',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

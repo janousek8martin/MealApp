@@ -38,8 +38,8 @@ export interface User {
   };
   workoutDays?: string[];
   mealPreferences?: {
-    mealsPerDay: number;
-    snackPositions: string[];
+    mealsPerDay: string; // "Three meals", "Four meals", "Five meals", "Six meals"
+    snackPositions: string[]; // ["Before Breakfast", "Between Breakfast and Lunch", etc.]
   };
   portionSizes?: {
     [key: string]: number;
@@ -167,10 +167,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
       ? { ...selectedUser, ...updates } 
       : selectedUser;
     
-    set({ 
-      users: updatedUsers, 
-      selectedUser: updatedSelectedUser 
-    });
+    set({ users: updatedUsers, selectedUser: updatedSelectedUser });
     
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
@@ -181,17 +178,16 @@ export const useUserStore = create<UserStore>((set, get) => ({
   
   deleteUser: async (id: string) => {
     const { users, selectedUser } = get();
-    const newUsers = users.filter(user => user.id !== id);
+    const updatedUsers = users.filter(user => user.id !== id);
     
-    let newSelectedUser = selectedUser;
-    if (selectedUser?.id === id) {
-      newSelectedUser = newUsers.length > 0 ? newUsers[0] : null;
-    }
+    const newSelectedUser = selectedUser?.id === id 
+      ? (updatedUsers.length > 0 ? updatedUsers[0] : null)
+      : selectedUser;
     
-    set({ users: newUsers, selectedUser: newSelectedUser });
+    set({ users: updatedUsers, selectedUser: newSelectedUser });
     
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(newUsers));
+      await AsyncStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
       if (newSelectedUser) {
         await AsyncStorage.setItem(STORAGE_KEYS.SELECTED_USER_ID, newSelectedUser.id);
       } else {
@@ -206,60 +202,29 @@ export const useUserStore = create<UserStore>((set, get) => ({
     set({ isLoading: true });
     
     try {
-      const storedUsers = await AsyncStorage.getItem(STORAGE_KEYS.USERS);
+      // Run migration first
+      await migrateFromOldStorage();
+      
+      const usersData = await AsyncStorage.getItem(STORAGE_KEYS.USERS);
       const selectedUserId = await AsyncStorage.getItem(STORAGE_KEYS.SELECTED_USER_ID);
       
-      if (storedUsers) {
-        const parsedUsers: User[] = JSON.parse(storedUsers);
-        let selectedUser = null;
+      if (usersData) {
+        const users: User[] = JSON.parse(usersData);
+        const selectedUser = selectedUserId 
+          ? users.find(user => user.id === selectedUserId) || null
+          : null;
         
-        if (selectedUserId) {
-          selectedUser = parsedUsers.find(user => user.id === selectedUserId) || 
-                        (parsedUsers.length > 0 ? parsedUsers[0] : null);
-        } else if (parsedUsers.length > 0) {
-          selectedUser = parsedUsers[0];
-          await AsyncStorage.setItem(STORAGE_KEYS.SELECTED_USER_ID, parsedUsers[0].id);
-        }
-        
-        set({ 
-          users: parsedUsers, 
-          selectedUser,
-          isLoading: false 
-        });
-      } else {
-        // If no users exist, try migration
-        await migrateFromOldStorage();
-        
-        // Try loading again after migration
-        const migratedUsers = await AsyncStorage.getItem(STORAGE_KEYS.USERS);
-        if (migratedUsers) {
-          const parsedUsers: User[] = JSON.parse(migratedUsers);
-          const selectedUserId = await AsyncStorage.getItem(STORAGE_KEYS.SELECTED_USER_ID);
-          let selectedUser = null;
-          
-          if (selectedUserId) {
-            selectedUser = parsedUsers.find(user => user.id === selectedUserId) || parsedUsers[0];
-          } else if (parsedUsers.length > 0) {
-            selectedUser = parsedUsers[0];
-            await AsyncStorage.setItem(STORAGE_KEYS.SELECTED_USER_ID, parsedUsers[0].id);
-          }
-          
-          set({ 
-            users: parsedUsers, 
-            selectedUser,
-            isLoading: false 
-          });
-        } else {
-          set({ isLoading: false });
-        }
+        set({ users, selectedUser });
       }
     } catch (error) {
       console.error('Error loading users:', error);
+    } finally {
       set({ isLoading: false });
     }
   },
   
   getUserById: (id: string) => {
-    return get().users.find(user => user.id === id);
+    const { users } = get();
+    return users.find(user => user.id === id);
   },
 }));
