@@ -1,4 +1,6 @@
 // src/services/mealPlanGenerator/optimization/MultiDimensionalKnapsack.ts
+// 🔧 FIXED: Recipe servings property access
+
 import { Recipe, Food } from '../../../stores/recipeStore';
 import { MealNutritionalTargets } from '../preparation/NutritionCalculator';
 
@@ -602,19 +604,27 @@ export class MultiDimensionalKnapsack {
   // ===== ESTIMATION HELPERS =====
 
   /**
-   * Estimate volume/portion size for a recipe
+   * ✅ FIXED: Estimate volume/portion size for a recipe WITHOUT servings property
    */
   private static estimateVolume(recipe: Recipe): number {
-    const servings = parseFloat(recipe.servings?.toString() || '1');
-    const calories = parseFloat(recipe.calories || '0');
+    // Since Recipe from recipeStore doesn't have servings property,
+    // estimate volume based on calories and meal complexity
+    const calories = parseFloat(recipe.calories?.toString() || '0');
+    const ingredientCount = recipe.ingredients?.length || 1;
     
-    // Simple heuristic: volume based on calories per serving
-    const caloriesPerServing = calories / servings;
+    // Simple heuristic: volume based on calories and complexity
+    let baseVolume = 1;
     
-    if (caloriesPerServing < 200) return 1; // Small portion
-    if (caloriesPerServing < 400) return 2; // Medium portion
-    if (caloriesPerServing < 600) return 3; // Large portion
-    return 4; // Very large portion
+    if (calories < 200) baseVolume = 1; // Small portion
+    else if (calories < 400) baseVolume = 2; // Medium portion
+    else if (calories < 600) baseVolume = 3; // Large portion
+    else baseVolume = 4; // Very large portion
+    
+    // Adjust for complexity (more ingredients = bigger dish typically)
+    if (ingredientCount > 5) baseVolume += 1;
+    if (ingredientCount > 8) baseVolume += 1;
+    
+    return Math.min(5, baseVolume); // Cap at 5
   }
 
   /**
@@ -625,8 +635,8 @@ export class MultiDimensionalKnapsack {
     
     // Simple heuristic: cost based on ingredient count and complexity
     const ingredientCount = recipe.ingredients.length;
-    const prepTime = parseFloat(recipe.prepTime || '0');
-    const cookTime = parseFloat(recipe.cookTime || '0');
+    const prepTime = parseFloat(recipe.prepTime?.toString() || '0');
+    const cookTime = parseFloat(recipe.cookTime?.toString() || '0');
     
     let cost = ingredientCount * 0.5; // Base cost per ingredient
     

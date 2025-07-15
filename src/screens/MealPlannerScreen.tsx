@@ -1,4 +1,6 @@
-// ===== 1. UPDATED MealPlannerScreen.tsx =====
+// src/screens/MealPlannerScreen.tsx
+// PŮVODNÍ KOMPLETNÍ VERZE - jen s opravenými helper funkcemi
+
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,6 +8,7 @@ import { useUserStore } from '../stores/userStore';
 import { useMealStore } from '../stores/mealStore';
 import { Calendar } from '../components/Calendar';
 import { DailyMealPlan } from '../components/DailyMealPlan';
+import { updateMealPlansWithSnackPositions } from '../utils/mealPlannerHelper'; // ✅ Helper import
 import { getWeekDates, getMonthTitle, getNextDay, getPreviousDay, isSameDay } from '../utils/dateUtils';
 
 function UserDropdown() {
@@ -76,105 +79,47 @@ const MealPlannerScreen: React.FC = () => {
     
     const { snackPositions } = selectedUser.mealPreferences;
     
-    // Získej všechny meal plany
-    const allMealPlans = { ...mealStore.mealPlans };
-    
-    // 🏗️ HELPER: Vytvoř default meal plan pro datum
-    const createDefaultMealPlan = (dateStr: string) => {
-      const mainMeals = [
-        { 
-          id: `breakfast-${dateStr}`, 
-          userId: selectedUser.id, 
-          date: dateStr, 
-          type: 'Breakfast' as const, 
-          name: '', 
-          position: 'Breakfast' 
-        },
-        { 
-          id: `lunch-${dateStr}`, 
-          userId: selectedUser.id, 
-          date: dateStr, 
-          type: 'Lunch' as const, 
-          name: '', 
-          position: 'Lunch' 
-        },
-        { 
-          id: `dinner-${dateStr}`, 
-          userId: selectedUser.id, 
-          date: dateStr, 
-          type: 'Dinner' as const, 
-          name: '', 
-          position: 'Dinner' 
-        }
-      ];
-      
-      const snacks = snackPositions.map((position, index) => ({
-        id: `snack-${position.replace(/\s+/g, '')}-${dateStr}-${index}`,
-        userId: selectedUser.id,
-        date: dateStr,
-        type: 'Snack' as const,
-        name: 'Snack',
-        position: position
-      }));
-      
-      return {
-        id: `${selectedUser.id}-${dateStr}`,
-        userId: selectedUser.id,
-        date: dateStr,
-        meals: [...mainMeals, ...snacks]
-      };
-    };
-    
-    // 🔄 UPDATE EXISTING: Aktualizuj existující meal plany
-    Object.keys(allMealPlans).forEach(key => {
-      if (key.startsWith(selectedUser.id + '-')) {
-        const dateStr = key.split('-')[1];
-        const currentMealPlan = allMealPlans[key];
-        
-        // Zachovej existující hlavní jídla a jejich obsah
-        const existingMainMeals = currentMealPlan.meals.filter(meal => 
-          meal.type !== 'Snack'
-        );
-        
-        // Vytvoř nové snacky podle aktuálních preferences
-        const newSnacks = snackPositions.map((position, index) => ({
-          id: `snack-${position.replace(/\s+/g, '')}-${dateStr}-${index}`,
-          userId: selectedUser.id,
-          date: dateStr,
-          type: 'Snack' as const,
-          name: 'Snack',
-          position: position
-        }));
-        
-        // Aktualizuj meal plan
-        allMealPlans[key] = {
-          ...currentMealPlan,
-          meals: [...existingMainMeals, ...newSnacks]
-        };
-      }
-    });
-    
-    // 🏗️ CREATE MISSING: Vytvoř meal plany pro aktuální týden pokud neexistují
-    const currentDate = new Date(selectedDate);
-    for (let i = -7; i <= 7; i++) {
-      const date = new Date(currentDate);
-      date.setDate(currentDate.getDate() + i);
-      const dateStr = date.toISOString().split('T')[0];
-      const key = `${selectedUser.id}-${dateStr}`;
-      
-      if (!allMealPlans[key]) {
-        allMealPlans[key] = createDefaultMealPlan(dateStr);
-}
-    }
+    // ✅ OPRAVENO: Používáme helper funkci místo inline kódu
+    const updatedMealPlans = updateMealPlansWithSnackPositions(
+      mealStore.mealPlans,    // allMealPlans
+      selectedUser.id,        // selectedUserId
+      selectedDate,           // selectedDate
+      snackPositions          // snackPositions
+    );
     
     // 💾 SAVE: Aktualizuj store a vyvolej re-render
-    mealStore.setMealPlans(allMealPlans);
+    mealStore.setMealPlans(updatedMealPlans);
     
     // 📱 REFRESH UI: Informuj DailyMealPlan komponentu o změnách
     if (dailyMealPlanRef.current?.forceRefresh) {
       dailyMealPlanRef.current.forceRefresh();
     }
-   };
+  };
+
+  // ✅ Smart meal plan generation
+  const handleGeneratePress = async () => {
+    if (!selectedUser) return;
+    
+    console.log('🎯 Starting meal plan generation for:', selectedDate.toISOString().split('T')[0]);
+    
+    try {
+      const dateString = selectedDate.toISOString().split('T')[0];
+      const success = await mealStore.generateMealPlan(selectedUser.id, dateString, selectedUser);
+      
+      if (success) {
+        console.log('✅ Meal plan generated successfully');
+        
+        // Force refresh UI
+        if (dailyMealPlanRef.current?.forceRefresh) {
+          dailyMealPlanRef.current.forceRefresh();
+        }
+      } else {
+        console.error('❌ Meal plan generation failed');
+      }
+    } catch (error) {
+      console.error('💥 Generation error:', error);
+    }
+  };
 
   const monthTitle = getMonthTitle(selectedDate);
 
@@ -252,6 +197,8 @@ const MealPlannerScreen: React.FC = () => {
         ref={dailyMealPlanRef}
         selectedDate={selectedDate} 
         onDateChange={handleDateChange}
+        onGeneratePress={handleGeneratePress}
+        isGenerating={false} // Můžete přidat state pokud chcete
       />
     </View>
   );
@@ -349,30 +296,3 @@ const styles = StyleSheet.create({
 });
 
 export default MealPlannerScreen;
-
-// ===== 2. REQUIRED UPDATE: mealStore.ts - Add setMealPlans method =====
-/*
-Add this method to your mealStore.ts:
-
-setMealPlans: (newMealPlans) => {
-  set({ mealPlans: newMealPlans });
-},
-*/
-
-// ===== 3. REQUIRED UPDATE: DailyMealPlan.tsx - Add forceRefresh method =====
-/*
-Add this to your DailyMealPlan component's useImperativeHandle:
-
-useImperativeHandle(ref, () => ({
-  animateToDate: (newDate: Date, direction: 'left' | 'right') => {
-    // ... existing code
-  },
-  forceRefresh: () => {
-    // Force component re-render by updating local state
-    setRefreshKey(prev => prev + 1);
-  }
-}));
-
-And add this state at the top of DailyMealPlan component:
-const [refreshKey, setRefreshKey] = useState(0);
-*/

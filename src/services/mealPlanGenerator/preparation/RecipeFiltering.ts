@@ -142,14 +142,15 @@ export class RecipeFilteringEngine {
   } {
     const filtered: Array<{ name: string; reason: string }> = [];
     
-    // Get user's avoid list - handle both old and new format
+    // ✅ OPRAVA: Správné typování user.avoidMeals s explicit type assertion
     let avoidList: string[] = [];
     if (user.avoidMeals) {
       if (Array.isArray(user.avoidMeals)) {
         avoidList = user.avoidMeals;
-      } else if (typeof user.avoidMeals === 'object' && user.avoidMeals.foodTypes) {
-        // New format with foodTypes and allergens
-        avoidList = [...(user.avoidMeals.foodTypes || []), ...(user.avoidMeals.allergens || [])];
+      } else if (typeof user.avoidMeals === 'object' && user.avoidMeals !== null) {
+        // Type assertion pro objekt s foodTypes a allergens
+        const avoidObj = user.avoidMeals as { foodTypes?: string[]; allergens?: string[] };
+        avoidList = [...(avoidObj.foodTypes || []), ...(avoidObj.allergens || [])];
       }
     }
 
@@ -287,10 +288,13 @@ export class RecipeFilteringEngine {
       // This could be expanded with seasonal ingredient preferences
       // For now, just basic logic
       if (context.season === 'summer') {
-        // Prefer lighter, cooler meals
+        // ✅ OPRAVA: Bezpečná kontrola pro instructions array
         filteredRecipes = filteredRecipes.filter(recipe => {
-          return !recipe.instructions.join(' ').toLowerCase().includes('bake') ||
-                 !recipe.instructions.join(' ').toLowerCase().includes('oven');
+          if (!recipe.instructions || !Array.isArray(recipe.instructions)) {
+            return true; // Skip filtering if no instructions
+          }
+          const instructionsText = recipe.instructions.join(' ').toLowerCase();
+          return !instructionsText.includes('bake') && !instructionsText.includes('oven');
         });
       }
     }
