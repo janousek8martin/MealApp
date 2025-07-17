@@ -1,5 +1,5 @@
 // src/components/DailyMealPlan.tsx
-// VAŠE PŮVODNÍ VERZE + pouze generateMealPlan funkcionalita
+// 🔧 OPRAVED: Původní swipe přes celou obrazovku, bez Generate button
 
 import React, { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { 
@@ -9,11 +9,9 @@ import {
   TouchableOpacity, 
   Animated, 
   ScrollView,
-  ActivityIndicator,
   Dimensions
 } from 'react-native';
-// ✅ OPRAVENO: Správné importy pro gesture handling
-import { PanGestureHandler, State, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { useMealStore } from '../stores/mealStore';
 import { useUserStore } from '../stores/userStore';
 
@@ -22,8 +20,6 @@ const { width: windowWidth } = Dimensions.get('window');
 interface DailyMealPlanProps {
   selectedDate: Date;
   onDateChange: (date: Date) => void;
-  onGeneratePress?: () => void;
-  isGenerating?: boolean;
 }
 
 export interface DailyMealPlanRef {
@@ -64,19 +60,18 @@ const applyMealPreferencesToDate = (
 };
 
 export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
-  ({ selectedDate, onDateChange, onGeneratePress, isGenerating }, ref) => {
-    // ✅ FORCE REFRESH STATE
+  ({ selectedDate, onDateChange }, ref) => {
+    // Force refresh state
     const [refreshKey, setRefreshKey] = useState(0);
     
-    // Existing state
-    const [showSnackModal, setShowSnackModal] = useState(false);
+    // Swipe state
     const swipeAnimation = useRef(new Animated.Value(0)).current;
     const isSwipingRef = useRef(false);
     const [previewDate, setPreviewDate] = useState<Date | null>(null);
     const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
     
-    // ✅ PŘIDÁNO: generateMealPlan z mealStore
-    const { getMealPlan, addMeal, removeMeal, resetDay, generateMealPlan } = useMealStore();
+    // Store hooks
+    const { getMealPlan, addMeal, removeMeal, resetDay } = useMealStore();
     const selectedUser = useUserStore(state => state.selectedUser);
 
     if (!selectedUser) {
@@ -90,7 +85,7 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
       );
     }
 
-    // ✅ UPDATED useImperativeHandle with forceRefresh + ORIGINAL animateToDate
+    // useImperativeHandle
     useImperativeHandle(ref, () => ({
       animateToDate: (newDate: Date, direction: 'left' | 'right') => {
         if (isSwipingRef.current) return;
@@ -106,11 +101,9 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
           duration: 250,
           useNativeDriver: true,
         }).start(() => {
-          // Set the new date immediately without showing old content
           if (onDateChange) {
             onDateChange(newDate);
           }
-          // Reset everything after date change
           setTimeout(() => {
             swipeAnimation.setValue(0);
             isSwipingRef.current = false;
@@ -120,14 +113,13 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
         });
       },
       
-      // ✅ NEW forceRefresh METHOD
       forceRefresh: () => {
         console.log('🔄 DailyMealPlan: Force refresh triggered');
         setRefreshKey(prev => prev + 1);
       }
     }));
 
-    // Reset animation when date changes externally (from calendar)
+    // Reset animation when date changes externally
     useEffect(() => {
       if (!isSwipingRef.current) {
         swipeAnimation.setValue(0);
@@ -136,21 +128,20 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
       }
     }, [selectedDate]);
 
-    // ✅ UPDATED useEffect with refreshKey dependency + ORIGINAL meal preferences logic
+    // Apply meal preferences when date changes
     useEffect(() => {
       if (selectedUser?.mealPreferences?.snackPositions && isDateTodayOrFuture(selectedDate)) {
         const currentDateStr = selectedDate.toISOString().split('T')[0];
         const mealPlan = getMealPlan(selectedUser.id, currentDateStr);
         
-        // If no meal plan exists for this date, apply preferences
         if (!mealPlan || !mealPlan.meals || mealPlan.meals.length === 0) {
           console.log('📅 Applying meal preferences for date:', currentDateStr);
           applyMealPreferencesToDate(selectedUser.id, selectedDate, selectedUser.mealPreferences, addMeal);
         }
       }
-    }, [selectedDate, selectedUser, addMeal, getMealPlan, refreshKey]); // ← Added refreshKey
+    }, [selectedDate, selectedUser, addMeal, getMealPlan, refreshKey]);
 
-    // ORIGINAL Helper functions
+    // Helper functions
     const getNextDay = (date: Date): Date => {
       const nextDay = new Date(date);
       nextDay.setDate(date.getDate() + 1);
@@ -163,11 +154,6 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
       return prevDay;
     };
 
-    const handleAddMeal = (type: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack', name: string, position?: string) => {
-      const currentDateStr = selectedDate.toISOString().split('T')[0];
-      addMeal(selectedUser.id, currentDateStr, { type, name, position });
-    };
-
     const handleRemoveMeal = (mealId: string) => {
       const currentDateStr = selectedDate.toISOString().split('T')[0];
       removeMeal(selectedUser.id, currentDateStr, mealId);
@@ -178,15 +164,22 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
     const currentMealPlan = getMealPlan(selectedUser.id, currentDateStr);
     const currentMeals = currentMealPlan?.meals || [];
 
-    // Sort meals by logical order
-    const sortedMeals = currentMeals.sort((a: any, b: any) => {
-      const mealOrder = { 'Breakfast': 1, 'Lunch': 3, 'Dinner': 5, 'Snack': 2 };
-      const aOrder = mealOrder[a.type as keyof typeof mealOrder] || 4;
-      const bOrder = mealOrder[b.type as keyof typeof mealOrder] || 4;
-      return aOrder - bOrder;
+    // Správné řazení meals podle časového pořadí
+    const sortedMeals = [...currentMeals].sort((a, b) => {
+      const getTimeOrder = (meal: any) => {
+        if (meal.type === 'Breakfast') return 1;
+        if (meal.type === 'Snack' && meal.position === 'Between Breakfast and Lunch') return 2;
+        if (meal.type === 'Lunch') return 3;
+        if (meal.type === 'Snack' && meal.position === 'Between Lunch and Dinner') return 4;
+        if (meal.type === 'Dinner') return 5;
+        if (meal.type === 'Snack' && meal.position === 'Before Breakfast') return 0;
+        if (meal.type === 'Snack' && meal.position === 'After Dinner') return 6;
+        return 99;
+      };
+      return getTimeOrder(a) - getTimeOrder(b);
     });
 
-    // ORIGINAL Pan gesture handler for swipe functionality
+    // 🔧 OPRAVENO: Lepší rozlišení mezi swipe a scroll
     const onGestureEvent = Animated.event(
       [{ nativeEvent: { translationX: swipeAnimation } }],
       { useNativeDriver: true }
@@ -194,9 +187,36 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
 
     const onHandlerStateChange = (event: any) => {
       if (event.nativeEvent.state === State.END) {
-        const { translationX, velocityX } = event.nativeEvent;
-        const threshold = windowWidth * 0.25;
-        const shouldSwipe = Math.abs(translationX) > threshold || Math.abs(velocityX) > 1000;
+        const { translationX, translationY, velocityX, velocityY } = event.nativeEvent;
+        
+        // Rozlišení mezi horizontálním swipe a vertikálním scrollem
+        const horizontalDistance = Math.abs(translationX);
+        const verticalDistance = Math.abs(translationY);
+        const horizontalVelocity = Math.abs(velocityX);
+        const verticalVelocity = Math.abs(velocityY);
+        
+        // Je to horizontální gesto?
+        const isHorizontalGesture = horizontalDistance > verticalDistance * 1.5;
+        
+        // Je to vertikální gesto (scroll)?
+        const isVerticalGesture = verticalDistance > horizontalDistance * 1.5;
+        
+        // Pokud je to jasně vertikální, ignoruj
+        if (isVerticalGesture) {
+          Animated.spring(swipeAnimation, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+          return;
+        }
+        
+        // Pro swipe potřebujeme: horizontální gesto + dostatečnou vzdálenost NEBO rychlost
+        const threshold = windowWidth * 0.35; // Zvýšený threshold - méně citlivé
+        const velocityThreshold = 1200; // Zvýšený velocity threshold
+        
+        const hasEnoughDistance = horizontalDistance > threshold;
+        const hasEnoughVelocity = horizontalVelocity > velocityThreshold;
+        const shouldSwipe = isHorizontalGesture && (hasEnoughDistance || hasEnoughVelocity);
 
         if (shouldSwipe) {
           const direction = translationX > 0 ? 'right' : 'left';
@@ -231,74 +251,40 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
     };
 
     return (
-      <GestureHandlerRootView style={styles.container}>
-        {/* ✅ PŘIDÁNO: Generation Button */}
-        {onGeneratePress && (
-          <View style={styles.generateContainer}>
-            <TouchableOpacity
-              style={[
-                styles.generateButton,
-                isGenerating && styles.generatingButton
-              ]}
-              onPress={onGeneratePress}
-              disabled={isGenerating}
-            >
-              <View style={styles.generateButtonContent}>
-                {isGenerating ? (
-                  <>
-                    <ActivityIndicator 
-                      size="small" 
-                      color="#FFFFFF" 
-                      style={styles.generateButtonIcon}
-                    />
-                    <Text style={[styles.generateButtonText, styles.generatingButtonText]}>
-                      Generating...
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.generateButtonIcon}>🎯</Text>
-                    <Text style={styles.generateButtonText}>
-                      Generate Meal Plan
-                    </Text>
-                  </>
-                )}
-              </View>
-            </TouchableOpacity>
-            
-            {/* Debug info during development */}
-            <Text style={styles.debugText}>
-              Date: {currentDateStr} | Meals: {currentMeals.length} | Refresh: {refreshKey}
-            </Text>
-          </View>
-        )}
-
-        {/* ORIGINAL PanGestureHandler for swipe functionality */}
+      <View style={styles.container}>
+        {/* 🔧 OPRAVENO: PanGestureHandler s lepší konfigurací pro scroll + swipe */}
         <PanGestureHandler
           onGestureEvent={onGestureEvent}
           onHandlerStateChange={onHandlerStateChange}
+          activeOffsetX={[-50, 50]}    // Větší offset - méně citlivé na horizontální pohyb
+          failOffsetY={[-20, 20]}      // Menší offset - rychleji pustí vertikální scroll
+          shouldCancelWhenOutside={true}
         >
           <Animated.View 
             style={[
-              styles.mealListContainer,
+              styles.animatedContainer,
               {
                 transform: [{ translateX: swipeAnimation }]
               }
             ]}
           >
-            <ScrollView style={styles.mealList} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              style={styles.scrollContainer}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={true}
+              bounces={true}
+              scrollEnabled={true}
+              nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+            >
               {sortedMeals.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyStateIcon}>🍽️</Text>
                   <Text style={styles.emptyStateText}>No meals planned for this day</Text>
                   <Text style={styles.emptyStateSubtext}>
-                    {onGeneratePress 
-                      ? 'Tap "Generate Meal Plan" to create an optimized meal plan' 
-                      : 'Add meals to get started with your daily plan'
-                    }
+                    Use the Generate button in the header to create an optimized meal plan
                   </Text>
                   
-                  {/* User info for debugging */}
                   {selectedUser && (
                     <View style={styles.debugInfo}>
                       <Text style={styles.debugTitle}>User Setup Status:</Text>
@@ -307,133 +293,103 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
                         {selectedUser.tdci?.adjustedTDCI && ` (${Math.round(selectedUser.tdci.adjustedTDCI)} cal)`}
                       </Text>
                       <Text style={styles.debugItem}>
-                        Meal Preferences: {selectedUser.mealPreferences ? '✅' : '❌'}
-                        {selectedUser.mealPreferences?.snackPositions && 
-                          ` (${selectedUser.mealPreferences.snackPositions.length} snacks)`
-                        }
-                      </Text>
-                      <Text style={styles.debugItem}>
-                        Avoid Meals: {selectedUser.avoidMeals ? `${selectedUser.avoidMeals.length} items` : 'None'}
+                        Meal Preferences: {selectedUser.mealPreferences ? '✅' : '❌'} 
+                        {selectedUser.mealPreferences?.snackPositions && ` (${selectedUser.mealPreferences.snackPositions.length} snacks)`}
                       </Text>
                     </View>
                   )}
                 </View>
               ) : (
-                sortedMeals.map((meal: any, index: number) => (
-                  <View key={`${meal.id}-${refreshKey}`} style={styles.mealItem}>
-                    <View style={styles.mealHeader}>
-                      <View style={styles.mealTypeContainer}>
-                        <Text style={styles.mealTypeIcon}>
-                          {meal.type === 'Breakfast' ? '🥐' : 
-                           meal.type === 'Lunch' ? '🥗' : 
-                           meal.type === 'Dinner' ? '🍽️' : '🍎'}
-                        </Text>
-                        <Text style={styles.mealType}>{meal.type}</Text>
+                <>
+                  {/* Meal Items */}
+                  {sortedMeals.map((meal, index) => (
+                    <View key={`${meal.id}-${refreshKey}`} style={styles.mealItem}>
+                      <View style={styles.mealHeader}>
+                        <View style={styles.mealTypeContainer}>
+                          <Text style={styles.mealIcon}>
+                            {meal.type === 'Breakfast' ? '🥐' : 
+                             meal.type === 'Lunch' ? '🥗' : 
+                             meal.type === 'Dinner' ? '🍽️' : '🍎'}
+                          </Text>
+                          <Text style={styles.mealType}>{meal.type}</Text>
+                        </View>
+                        
+                        {meal.position && meal.position !== meal.type && (
+                          <Text style={styles.mealPosition}>({meal.position})</Text>
+                        )}
                       </View>
                       
-                      {meal.position && meal.position !== meal.type && (
-                        <Text style={styles.mealPosition}>({meal.position})</Text>
-                      )}
-                    </View>
-                    
-                    <Text style={styles.mealName}>
-                      {meal.name || 'Not planned yet'}
-                    </Text>
-                    
-                    {/* ✅ UPRAVENO: Zobrazuje skutečné nutrition info nebo placeholder */}
-                    <View style={styles.mealNutrition}>
-                      <Text style={styles.nutritionText}>
-                        Calories: {meal.calories || '--'} | Protein: {meal.protein || '--'}g | Carbs: {meal.carbs || '--'}g | Fat: {meal.fat || '--'}g
+                      <Text style={styles.mealName}>
+                        {meal.name || 'Not planned yet'}
                       </Text>
-                    </View>
-                    
-                    {/* Action buttons */}
-                    <View style={styles.mealActions}>
-                      <TouchableOpacity 
-                        style={styles.editButton}
-                        onPress={() => console.log('Edit meal:', meal.id)}
-                      >
-                        <Text style={styles.editButtonText}>✏️ Edit</Text>
-                      </TouchableOpacity>
                       
-                      <TouchableOpacity 
-                        style={styles.deleteButton}
-                        onPress={() => {
-                          removeMeal(selectedUser.id, currentDateStr, meal.id);
-                          setRefreshKey(prev => prev + 1); // ✅ PŘIDÁNO: Force refresh při smazání
-                        }}
-                      >
-                        <Text style={styles.deleteButtonText}>🗑️ Remove</Text>
-                      </TouchableOpacity>
+                      <View style={styles.mealNutrition}>
+                        <Text style={styles.nutritionText}>
+                          Calories: {meal.calories || '--'} | 
+                          Protein: {meal.protein || '--'}g | 
+                          Carbs: {meal.carbs || '--'}g | 
+                          Fat: {meal.fat || '--'}g
+                        </Text>
+                      </View>
+                      
+                      <View style={styles.mealActions}>
+                        <TouchableOpacity 
+                          style={styles.editButton}
+                          onPress={() => console.log('Edit meal:', meal.id)}
+                        >
+                          <Text style={styles.editButtonText}>✏️ Edit</Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity 
+                          style={styles.deleteButton}
+                          onPress={() => {
+                            handleRemoveMeal(meal.id);
+                            setRefreshKey(prev => prev + 1);
+                          }}
+                        >
+                          <Text style={styles.deleteButtonText}>🗑️ Remove</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
+                  ))}
+                  
+                  {/* Daily totals */}
+                  <View style={styles.dailyTotals}>
+                    <Text style={styles.dailyTotalsTitle}>Daily Totals</Text>
+                    <Text style={styles.dailyTotalsText}>
+                      Calories: {sortedMeals.reduce((sum, meal) => sum + (meal.calories || 0), 0)} | 
+                      Protein: {sortedMeals.reduce((sum, meal) => sum + (meal.protein || 0), 0)}g | 
+                      Carbs: {sortedMeals.reduce((sum, meal) => sum + (meal.carbs || 0), 0)}g | 
+                      Fat: {sortedMeals.reduce((sum, meal) => sum + (meal.fat || 0), 0)}g
+                    </Text>
                   </View>
-                ))
+                </>
               )}
             </ScrollView>
           </Animated.View>
         </PanGestureHandler>
-      </GestureHandlerRootView>
+      </View>
     );
   }
 );
 
+DailyMealPlan.displayName = 'DailyMealPlan';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#f8f9fa',
   },
-  // ✅ PŘIDÁNO: Styly pro Generation Button
-  generateContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    backgroundColor: '#FAFAFA',
-  },
-  generateButton: {
-    backgroundColor: '#FFB347',
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  generatingButton: {
-    backgroundColor: '#FF8C00',
-  },
-  generateButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  generateButtonIcon: {
-    marginRight: 8,
-    fontSize: 16,
-  },
-  generateButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  generatingButtonText: {
-    color: '#FFFFFF',
-  },
-  debugText: {
-    fontSize: 10,
-    color: '#999999',
-    textAlign: 'center',
-    marginTop: 5,
-  },
-  // PŮVODNÍ STYLY
-  mealListContainer: {
+  animatedContainer: {
     flex: 1,
   },
-  mealList: {
+  scrollContainer: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 100,
     paddingTop: 10,
   },
   emptyState: {
@@ -441,7 +397,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 60,
-    paddingHorizontal: 20,
+    minHeight: 400,
   },
   emptyStateIcon: {
     fontSize: 48,
@@ -450,46 +406,48 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#666666',
-    marginBottom: 8,
+    color: '#495057',
     textAlign: 'center',
+    marginBottom: 8,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: '#999999',
+    color: '#6c757d',
     textAlign: 'center',
     lineHeight: 20,
+    maxWidth: 280,
   },
   debugInfo: {
     marginTop: 20,
     padding: 15,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: '#f8f9fa',
     borderRadius: 8,
-    width: '100%',
+    borderWidth: 1,
+    borderColor: '#dee2e6',
   },
   debugTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#333333',
+    color: '#495057',
     marginBottom: 8,
   },
   debugItem: {
-    fontSize: 11,
-    color: '#666666',
-    marginBottom: 3,
+    fontSize: 12,
+    color: '#6c757d',
+    marginBottom: 4,
   },
   mealItem: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 16,
-    marginVertical: 6,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FFB347',
+    marginVertical: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowRadius: 8,
+    elevation: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ff7f50',
   },
   mealHeader: {
     flexDirection: 'row',
@@ -501,64 +459,84 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  mealTypeIcon: {
+  mealIcon: {
     fontSize: 20,
     marginRight: 8,
   },
   mealType: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333333',
+    color: '#495057',
   },
   mealPosition: {
     fontSize: 12,
-    color: '#999999',
+    color: '#6c757d',
     fontStyle: 'italic',
   },
   mealName: {
-    fontSize: 14,
-    color: '#666666',
-    marginBottom: 8,
+    fontSize: 18,
     fontWeight: '500',
+    color: '#212529',
+    marginBottom: 8,
   },
   mealNutrition: {
     marginBottom: 12,
   },
   nutritionText: {
-    fontSize: 12,
-    color: '#888888',
+    fontSize: 14,
+    color: '#6c757d',
+    lineHeight: 20,
   },
   mealActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
   editButton: {
-    backgroundColor: '#E3F2FD',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: '#e3f2fd',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 6,
     flex: 1,
     marginRight: 8,
   },
   editButtonText: {
-    fontSize: 12,
-    color: '#1976D2',
-    textAlign: 'center',
+    color: '#1976d2',
+    fontSize: 14,
     fontWeight: '500',
+    textAlign: 'center',
   },
   deleteButton: {
-    backgroundColor: '#FFEBEE',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: '#ffebee',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 6,
     flex: 1,
     marginLeft: 8,
   },
   deleteButtonText: {
-    fontSize: 12,
-    color: '#D32F2F',
-    textAlign: 'center',
+    color: '#d32f2f',
+    fontSize: 14,
     fontWeight: '500',
+    textAlign: 'center',
+  },
+  dailyTotals: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 16,
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+  },
+  dailyTotalsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#495057',
+    marginBottom: 8,
+  },
+  dailyTotalsText: {
+    fontSize: 14,
+    color: '#6c757d',
+    lineHeight: 20,
   },
 });
 

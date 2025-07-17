@@ -1,13 +1,16 @@
 // App.tsx
+// 🔧 OPRAVED: Přidáno GestureHandlerRootView pro správný gesture handling
+
 import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'react-native';
 import { Text } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler'; // 🔧 OPRAVED: Přidáno
 
 // Screens 
 import { HomeScreen } from './src/screens/HomeScreen';
-import MealPlannerScreen from './src/screens/MealPlannerScreen'; // default import
+import MealPlannerScreen from './src/screens/MealPlannerScreen';
 import { RecipesScreen } from './src/screens/RecipesScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 
@@ -35,7 +38,8 @@ const App: React.FC = () => {
   };
 
   return (
-    <>
+    // 🔧 OPRAVED: Wrap everything in GestureHandlerRootView
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar backgroundColor="#FFB347" barStyle="light-content" />
       <NavigationContainer>
         <Tab.Navigator
@@ -66,49 +70,17 @@ const App: React.FC = () => {
               paddingBottom: 20,
               height: 75,
             },
-            tabBarLabelStyle: {
-              fontSize: 12,
-              fontWeight: '500',
-              paddingTop: 2,
-            },
             headerShown: false,
           })}
         >
-          <Tab.Screen 
-            name="Home" 
-            component={HomeScreen}
-            options={{
-              tabBarLabel: 'Home',
-            }}
-          />
-          <Tab.Screen 
-            name="Plan Meals" 
-            component={MealPlannerScreen}
-            options={{
-              tabBarLabel: 'Plan Meals',
-            }}
-          />
-          <Tab.Screen 
-            name="Recipes" 
-            component={RecipesScreen}
-            options={{
-              tabBarLabel: 'Recipes',
-            }}
-          />
-          <Tab.Screen 
-            name="Settings" 
-            component={SettingsScreen}
-            options={{
-              tabBarLabel: 'Settings',
-            }}
-          />
+          <Tab.Screen name="Home" component={HomeScreen} />
+          <Tab.Screen name="Plan Meals" component={MealPlannerScreen} />
+          <Tab.Screen name="Recipes" component={RecipesScreen} />
+          <Tab.Screen name="Settings" component={SettingsScreen} />
         </Tab.Navigator>
       </NavigationContainer>
-    </>
+    </GestureHandlerRootView>
   );
 };
-
-// Add displayName to prevent the error
-App.displayName = 'App';
 
 export default App;

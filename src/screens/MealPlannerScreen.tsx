@@ -1,16 +1,17 @@
 // src/screens/MealPlannerScreen.tsx
-// PŮVODNÍ KOMPLETNÍ VERZE - jen s opravenými helper funkcemi
+// 🔧 UPRAVED: Generate button v header + původní swipe
 
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, StatusBar } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, StatusBar, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUserStore } from '../stores/userStore';
 import { useMealStore } from '../stores/mealStore';
 import { Calendar } from '../components/Calendar';
 import { DailyMealPlan } from '../components/DailyMealPlan';
-import { updateMealPlansWithSnackPositions } from '../utils/mealPlannerHelper'; // ✅ Helper import
+import { updateMealPlansWithSnackPositions } from '../utils/mealPlannerHelper';
 import { getWeekDates, getMonthTitle, getNextDay, getPreviousDay, isSameDay } from '../utils/dateUtils';
 
+// 🔧 UPRAVED UserDropdown s Generate buttonem
 function UserDropdown() {
   const users = useUserStore((state) => state.users);
   const selectedUser = useUserStore((state) => state.selectedUser);
@@ -57,52 +58,50 @@ function UserDropdown() {
 const MealPlannerScreen: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekDates, setWeekDates] = useState(() => getWeekDates(new Date()));
+  const [isGenerating, setIsGenerating] = useState(false);
   const insets = useSafeAreaInsets();
   
   // Reference pro DailyMealPlan komponentu
   const dailyMealPlanRef = useRef<any>(null);
 
-  // 🔄 REAL-TIME SYNCHRONIZATION: Sledování změn v user preferences
+  // Store hooks
   const selectedUser = useUserStore((state) => state.selectedUser);
   const mealStore = useMealStore();
-  
-  // ⚡ AUTOMATIC UPDATE: Když se změní meal preferences, aktualizuj všechny meal plany
+
+  // Synchronization effect
   useEffect(() => {
     if (selectedUser?.mealPreferences) {
-        syncMealPlansWithPreferences();
+      syncMealPlansWithPreferences();
     }
   }, [selectedUser?.mealPreferences]);
 
-  // 🛠️ SYNCHRONIZATION FUNCTION: Hlavní funkce pro synchronizaci
   const syncMealPlansWithPreferences = () => {
     if (!selectedUser?.mealPreferences) return;
     
     const { snackPositions } = selectedUser.mealPreferences;
     
-    // ✅ OPRAVENO: Používáme helper funkci místo inline kódu
     const updatedMealPlans = updateMealPlansWithSnackPositions(
-      mealStore.mealPlans,    // allMealPlans
-      selectedUser.id,        // selectedUserId
-      selectedDate,           // selectedDate
-      snackPositions          // snackPositions
+      mealStore.mealPlans,
+      selectedUser.id,
+      selectedDate,
+      snackPositions
     );
     
-    // 💾 SAVE: Aktualizuj store a vyvolej re-render
     mealStore.setMealPlans(updatedMealPlans);
     
-    // 📱 REFRESH UI: Informuj DailyMealPlan komponentu o změnách
     if (dailyMealPlanRef.current?.forceRefresh) {
       dailyMealPlanRef.current.forceRefresh();
     }
   };
 
-  // ✅ Smart meal plan generation
+  // 🔧 NOVÝ: Generate meal plan handler
   const handleGeneratePress = async () => {
-    if (!selectedUser) return;
+    if (!selectedUser || isGenerating) return;
     
     console.log('🎯 Starting meal plan generation for:', selectedDate.toISOString().split('T')[0]);
     
     try {
+      setIsGenerating(true);
       const dateString = selectedDate.toISOString().split('T')[0];
       const success = await mealStore.generateMealPlan(selectedUser.id, dateString, selectedUser);
       
@@ -118,9 +117,21 @@ const MealPlannerScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('💥 Generation error:', error);
+    } finally {
+      setIsGenerating(false);
     }
   };
 
+  // Helper function to check if date is today or in the future
+  const isDateTodayOrFuture = (date: Date): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(date);
+    checkDate.setHours(0, 0, 0, 0);
+    return checkDate >= today;
+  };
+
+  // Calendar helpers
   const monthTitle = getMonthTitle(selectedDate);
 
   const handleDateSelect = (date: Date) => {
@@ -177,8 +188,29 @@ const MealPlannerScreen: React.FC = () => {
       
       <View style={[styles.statusBarSeparator, { paddingTop: insets.top }]} />
       
+      {/* 🔧 UPRAVED: Header s Generate buttonem */}
       <View style={styles.topHeader}>
         <View style={styles.headerContent}>
+          {/* 🔧 NOVÝ: Generate button vlevo */}
+          {isDateTodayOrFuture(selectedDate) && (
+            <TouchableOpacity 
+              style={[styles.generateButton, isGenerating && styles.generatingButton]}
+              onPress={handleGeneratePress}
+              disabled={isGenerating}
+              activeOpacity={0.7}
+            >
+              {isGenerating ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.generateButtonText}>Generate Plan</Text>
+              )}
+            </TouchableOpacity>
+          )}
+          
+          {/* Spacer */}
+          <View style={styles.spacer} />
+          
+          {/* User dropdown vpravo */}
           <UserDropdown />
         </View>
       </View>
@@ -193,12 +225,12 @@ const MealPlannerScreen: React.FC = () => {
         onNextWeek={handleNextWeek}
       />
 
+      {/* 🔧 UPRAVED: DailyMealPlan bez Generate button */}
       <DailyMealPlan 
         ref={dailyMealPlanRef}
         selectedDate={selectedDate} 
         onDateChange={handleDateChange}
-        onGeneratePress={handleGeneratePress}
-        isGenerating={false} // Můžete přidat state pokud chcete
+        // Odstraněno onGeneratePress a isGenerating
       />
     </View>
   );
@@ -219,7 +251,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
     paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingVertical: 12,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -233,8 +265,40 @@ const styles = StyleSheet.create({
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    minHeight: 40,
   },
+  
+  // 🔧 NOVÝ: Generate button styly
+  generateButton: {
+    backgroundColor: '#FFB347',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  generatingButton: {
+    backgroundColor: '#ffa500',
+    opacity: 0.8,
+  },
+  generateButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  
+  spacer: {
+    flex: 1,
+  },
+  
+  // Původní dropdown styly
   dropdown: {
     position: 'relative',
     minWidth: 120,
