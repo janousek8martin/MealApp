@@ -1,7 +1,10 @@
 // src/components/MealSection.tsx
+// 🔧 OPRAVED: Import Recipe a Food z recipeStore místo types/meal
+
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, FlatList, TextInput } from 'react-native';
-import { Meal, Recipe, Food } from '../types/meal';
+import { Meal } from '../types/meal';
+import { Recipe, Food, useRecipeStore } from '../stores/recipeStore';
 import { useMealStore } from '../stores/mealStore';
 
 interface MealSectionProps {
@@ -29,8 +32,8 @@ export const MealSection: React.FC<MealSectionProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItem, setSelectedItem] = useState<Recipe | Food | null>(null);
   
-  const recipes = useMealStore(state => state.recipes);
-  const foods = useMealStore(state => state.foods);
+  const recipes = useRecipeStore(state => state.recipes);
+  const foods = useRecipeStore(state => state.foods);
 
   const getMealIcon = () => {
     switch (type) {
@@ -112,31 +115,57 @@ export const MealSection: React.FC<MealSectionProps> = ({
       {isExpanded && (
         <View style={styles.content}>
           {meals.length > 0 ? (
-            meals.map((meal) => (
-              <View key={meal.id} style={styles.mealItem}>
-                <Text style={styles.mealName}>{meal.name}</Text>
-                <TouchableOpacity onPress={() => onRemoveMeal(meal.id)}>
-                  <Text style={styles.removeMeal}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            ))
+            <View style={styles.mealsList}>
+              {meals.map((meal, index) => (
+                <View key={meal.id} style={styles.mealItem}>
+                  <View style={styles.mealInfo}>
+                    <Text style={styles.mealName}>{meal.name}</Text>
+                    {meal.position && meal.position !== type && (
+                      <Text style={styles.mealPosition}>({meal.position})</Text>
+                    )}
+                    <View style={styles.mealNutrition}>
+                      <Text style={styles.nutritionText}>
+                        Calories: {meal.calories || '--'} | 
+                        Protein: {meal.protein || '--'}g | 
+                        Carbs: {meal.carbs || '--'}g | 
+                        Fat: {meal.fat || '--'}g
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.mealActions}>
+                    <TouchableOpacity 
+                      style={styles.editButton}
+                      onPress={() => console.log('Edit meal:', meal.id)}
+                    >
+                      <Text style={styles.editButtonText}>✏️</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity 
+                      style={styles.removeButton}
+                      onPress={() => onRemoveMeal(meal.id)}
+                    >
+                      <Text style={styles.removeButtonText}>🗑️</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
           ) : (
-            <TouchableOpacity 
-              style={styles.addButton}
-              onPress={() => setShowAddModal(true)}
-            >
-              <Text style={styles.addButtonText}>+ Add {type}</Text>
-            </TouchableOpacity>
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No {type.toLowerCase()} planned</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Add meals manually or use the Generate button
+              </Text>
+            </View>
           )}
           
-          {meals.length > 0 && (
-            <TouchableOpacity 
-              style={styles.addMoreButton}
-              onPress={() => setShowAddModal(true)}
-            >
-              <Text style={styles.addMoreText}>+ Add more</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity 
+            style={styles.addButton}
+            onPress={() => setShowAddModal(true)}
+          >
+            <Text style={styles.addButtonText}>+ Add {type}</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -147,63 +176,79 @@ export const MealSection: React.FC<MealSectionProps> = ({
         transparent={true}
         onRequestClose={closeModal}
       >
-        <View style={styles.modalContainer}>
+        <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <TouchableOpacity style={styles.closeButton} onPress={closeModal}>
-              <Text style={styles.closeText}>✕</Text>
-            </TouchableOpacity>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add {type}</Text>
+              <TouchableOpacity onPress={closeModal}>
+                <Text style={styles.modalCloseButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
             
-            <Text style={styles.modalTitle}>Add {type}</Text>
-            
-            <View style={styles.tabContainer}>
+            {/* Toggle between recipes and foods */}
+            <View style={styles.toggleContainer}>
               <TouchableOpacity
-                style={[styles.tab, isAddingRecipe && styles.activeTab]}
+                style={[styles.toggleButton, isAddingRecipe && styles.toggleButtonActive]}
                 onPress={() => setIsAddingRecipe(true)}
               >
-                <Text style={[styles.tabText, isAddingRecipe && styles.activeTabText]}>
+                <Text style={[styles.toggleButtonText, isAddingRecipe && styles.toggleButtonTextActive]}>
                   Recipes
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.tab, !isAddingRecipe && styles.activeTab]}
+                style={[styles.toggleButton, !isAddingRecipe && styles.toggleButtonActive]}
                 onPress={() => setIsAddingRecipe(false)}
               >
-                <Text style={[styles.tabText, !isAddingRecipe && styles.activeTabText]}>
+                <Text style={[styles.toggleButtonText, !isAddingRecipe && styles.toggleButtonTextActive]}>
                   Foods
                 </Text>
               </TouchableOpacity>
             </View>
 
+            {/* Search input */}
             <TextInput
               style={styles.searchInput}
+              placeholder={`Search ${isAddingRecipe ? 'recipes' : 'foods'}...`}
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholder={`Search ${isAddingRecipe ? 'recipes' : 'foods'}...`}
             />
 
+            {/* Items list */}
             <FlatList
               data={filteredItems}
               keyExtractor={(item) => item.id}
-              style={styles.itemList}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[
                     styles.itemRow,
-                    selectedItem?.id === item.id && styles.selectedItem
+                    selectedItem?.id === item.id && styles.itemRowSelected
                   ]}
                   onPress={() => setSelectedItem(item)}
                 >
-                  <Text style={styles.itemName}>{item.name}</Text>
+                  <View style={styles.itemInfo}>
+                    <Text style={styles.itemName}>{item.name}</Text>
+                    <Text style={styles.itemNutrition}>
+                      {item.calories} cal | {item.protein}g protein
+                    </Text>
+                  </View>
+                  
+                  {selectedItem?.id === item.id && (
+                    <Text style={styles.selectedIcon}>✓</Text>
+                  )}
                 </TouchableOpacity>
               )}
+              style={styles.itemsList}
             />
 
-            <TouchableOpacity 
-              style={[styles.confirmButton, !selectedItem && styles.disabledButton]}
+            {/* Add button */}
+            <TouchableOpacity
+              style={[styles.modalAddButton, !selectedItem && styles.modalAddButtonDisabled]}
               onPress={handleAddMeal}
               disabled={!selectedItem}
             >
-              <Text style={styles.confirmText}>Add Meal</Text>
+              <Text style={styles.modalAddButtonText}>
+                Add {selectedItem?.name || 'Selected Item'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -214,218 +259,275 @@ export const MealSection: React.FC<MealSectionProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
-    marginVertical: 5,
+    backgroundColor: '#ffffff',
     borderRadius: 12,
+    marginVertical: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#f8f9fa',
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#e9ecef',
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   icon: {
-    fontSize: 24,
-    marginRight: 10,
+    fontSize: 20,
+    marginRight: 8,
   },
   title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333333',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#495057',
   },
   mealPreview: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 15,
+    marginRight: 8,
   },
   mealPreviewText: {
     fontSize: 14,
-    color: '#666666',
-    fontWeight: '500',
-    textAlign: 'center',
+    color: '#6c757d',
+    marginRight: 4,
   },
   mealCount: {
     fontSize: 12,
-    color: '#FFB347',
-    fontWeight: 'bold',
-    marginLeft: 6,
-    backgroundColor: '#FFE4B5',
+    color: '#ff7f50',
+    fontWeight: '600',
+    backgroundColor: '#fff3f0',
+    borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 10,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   deleteButton: {
-    marginRight: 10,
-    padding: 5,
+    backgroundColor: '#f8d7da',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginRight: 8,
   },
   deleteText: {
-    color: '#FF6B6B',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 14,
+    color: '#721c24',
   },
   expandButton: {
-    backgroundColor: '#FFB347',
-    borderRadius: 15,
-    width: 30,
-    height: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#e9ecef',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   expandIcon: {
-    fontSize: 18,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#495057',
+    fontWeight: '600',
   },
   content: {
-    padding: 15,
+    padding: 16,
+  },
+  mealsList: {
+    marginBottom: 16,
   },
   mealItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
-    marginBottom: 8,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f3f4',
+  },
+  mealInfo: {
+    flex: 1,
   },
   mealName: {
-    fontSize: 16,
-    color: '#333333',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#495057',
+    marginBottom: 4,
   },
-  removeMeal: {
-    color: '#FF6B6B',
-    fontSize: 16,
-    fontWeight: 'bold',
+  mealPosition: {
+    fontSize: 12,
+    color: '#6c757d',
+    fontStyle: 'italic',
+    marginBottom: 4,
+  },
+  mealNutrition: {
+    // Container for nutrition info
+  },
+  nutritionText: {
+    fontSize: 12,
+    color: '#6c757d',
+  },
+  mealActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editButton: {
+    backgroundColor: '#e9ecef',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  editButtonText: {
+    fontSize: 12,
+    color: '#495057',
+  },
+  removeButton: {
+    backgroundColor: '#f8d7da',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  removeButtonText: {
+    fontSize: 12,
+    color: '#721c24',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#6c757d',
+    marginBottom: 4,
+  },
+  emptyStateSubtext: {
+    fontSize: 12,
+    color: '#adb5bd',
+    textAlign: 'center',
   },
   addButton: {
-    padding: 15,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: '#ff7f50',
     borderRadius: 8,
+    paddingVertical: 12,
     alignItems: 'center',
   },
   addButtonText: {
-    color: '#FFB347',
-    fontSize: 16,
+    color: '#ffffff',
+    fontSize: 14,
     fontWeight: '600',
   },
-  addMoreButton: {
-    padding: 10,
-    alignItems: 'center',
-  },
-  addMoreText: {
-    color: '#FFB347',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  modalContainer: {
+  
+  // Modal styles
+  modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
-    padding: 20,
     width: '90%',
     maxHeight: '80%',
-    elevation: 10,
-    zIndex: 1000,
+    padding: 20,
   },
-  closeButton: {
-    position: 'absolute',
-    top: 15,
-    right: 15,
-    zIndex: 1,
-  },
-  closeText: {
-    fontSize: 20,
-    color: '#666666',
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#333333',
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    marginBottom: 20,
-  },
-  tab: {
-    flex: 1,
-    padding: 12,
-    alignItems: 'center',
-    borderRadius: 8,
-    backgroundColor: '#F0F0F0',
-    marginHorizontal: 5,
-  },
-  activeTab: {
-    backgroundColor: '#FFB347',
-  },
-  tabText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    color: '#666666',
+    color: '#495057',
   },
-  activeTabText: {
-    color: '#FFFFFF',
+  modalCloseButton: {
+    fontSize: 18,
+    color: '#6c757d',
+    fontWeight: '600',
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  toggleButtonActive: {
+    backgroundColor: '#ff7f50',
+  },
+  toggleButtonText: {
+    fontSize: 14,
+    color: '#6c757d',
+    fontWeight: '600',
+  },
+  toggleButtonTextActive: {
+    color: '#ffffff',
   },
   searchInput: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    backgroundColor: '#f8f9fa',
     borderRadius: 8,
-    padding: 12,
-    marginBottom: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     fontSize: 16,
+    marginBottom: 16,
   },
-  itemList: {
-    maxHeight: 200,
-    marginBottom: 20,
+  itemsList: {
+    maxHeight: 300,
+    marginBottom: 16,
   },
   itemRow: {
-    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#f1f3f4',
   },
-  selectedItem: {
-    backgroundColor: '#FFE4B5',
+  itemRowSelected: {
+    backgroundColor: '#fff3f0',
+  },
+  itemInfo: {
+    flex: 1,
   },
   itemName: {
-    fontSize: 16,
-    color: '#333333',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#495057',
+    marginBottom: 4,
   },
-  confirmButton: {
-    backgroundColor: '#FFB347',
-    padding: 15,
+  itemNutrition: {
+    fontSize: 12,
+    color: '#6c757d',
+  },
+  selectedIcon: {
+    fontSize: 16,
+    color: '#ff7f50',
+    fontWeight: '600',
+  },
+  modalAddButton: {
+    backgroundColor: '#ff7f50',
     borderRadius: 8,
+    paddingVertical: 16,
     alignItems: 'center',
   },
-  disabledButton: {
-    opacity: 0.5,
+  modalAddButtonDisabled: {
+    backgroundColor: '#e9ecef',
   },
-  confirmText: {
-    color: '#FFFFFF',
+  modalAddButtonText: {
+    color: '#ffffff',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
 });

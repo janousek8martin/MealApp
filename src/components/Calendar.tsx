@@ -1,4 +1,6 @@
 // src/components/Calendar.tsx
+// 🔧 OPRAVENO: Stabilní layout - žádné poskakování
+
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Modal } from 'react-native';
 import { isSameDay, isToday } from '../utils/dateUtils';
@@ -13,19 +15,6 @@ interface CalendarProps {
   onPreviousWeek: () => void;
   onNextWeek: () => void;
 }
-
-// Helper function to check if date is within allowed range (current month + previous month)
-const isDateInAllowedRange = (date: Date): boolean => {
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  const currentMonth = today.getMonth();
-  
-  // First day of previous month
-  const firstDayOfPreviousMonth = new Date(currentYear, currentMonth - 1, 1);
-  
-  // Date must be >= first day of previous month
-  return date >= firstDayOfPreviousMonth;
-};
 
 const MonthCalendar: React.FC<{
   selectedDate: Date;
@@ -60,15 +49,7 @@ const MonthCalendar: React.FC<{
   };
 
   const goToPreviousMonth = () => {
-    const newMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1);
-    
-    // Check if the new month would go beyond allowed range
-    const firstDayOfNewMonth = new Date(newMonth.getFullYear(), newMonth.getMonth(), 1);
-    if (!isDateInAllowedRange(firstDayOfNewMonth)) {
-      return; // Block navigation if it would go too far back
-    }
-    
-    setCurrentMonth(newMonth);
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
   };
 
   const goToNextMonth = () => {
@@ -76,11 +57,6 @@ const MonthCalendar: React.FC<{
   };
 
   const handleDateSelect = (date: Date) => {
-    // Check if date is in allowed range before selecting
-    if (!isDateInAllowedRange(date)) {
-      return;
-    }
-    
     onSelectDate(date);
     onClose();
   };
@@ -125,26 +101,22 @@ const MonthCalendar: React.FC<{
 
               const isSelected = isSameDay(selectedDate, day);
               const isCurrent = isToday(day);
-              const isAllowed = isDateInAllowedRange(day);
 
               return (
                 <TouchableOpacity
                   key={index}
                   style={styles.monthDay}
                   onPress={() => handleDateSelect(day)}
-                  disabled={!isAllowed}
                 >
                   <View style={[
                     styles.monthDayContent,
                     isSelected && styles.selectedMonthDay,
                     isCurrent && !isSelected && styles.currentMonthDay,
-                    !isAllowed && styles.disabledMonthDay,
                   ]}>
                     <Text style={[
                       styles.monthDayText,
                       isSelected && styles.selectedMonthDayText,
                       isCurrent && !isSelected && styles.currentMonthDayText,
-                      !isAllowed && styles.disabledMonthDayText,
                     ]}>
                       {day.getDate()}
                     </Text>
@@ -174,15 +146,6 @@ export const Calendar: React.FC<CalendarProps> = ({
     onSelectDate(new Date());
   };
 
-  const handleDateSelect = (date: Date) => {
-    // Check if date is in allowed range before selecting
-    if (!isDateInAllowedRange(date)) {
-      return;
-    }
-    
-    onSelectDate(date);
-  };
-
   return (
     <View style={styles.container}>
       <View style={styles.monthTitleRow}>
@@ -190,6 +153,7 @@ export const Calendar: React.FC<CalendarProps> = ({
           <Text style={styles.monthTitle}>{monthTitle}</Text>
           <Text style={styles.dropdownArrow}>▼</Text>
         </TouchableOpacity>
+        {/* ✅ OPRAVENO: Stabilní today button - vždy stejné rozměry */}
         {!isSelectedToday && (
           <TouchableOpacity style={styles.todayButton} onPress={handleTodayPress}>
             <Text style={styles.todayButtonText}>Today</Text>
@@ -211,32 +175,28 @@ export const Calendar: React.FC<CalendarProps> = ({
           {weekDates.map((date, index) => {
             const isSelected = isSameDay(selectedDate, date);
             const isCurrent = isToday(date);
-            const isAllowed = isDateInAllowedRange(date);
             
             return (
               <TouchableOpacity
                 key={index}
                 style={styles.dayContainer}
-                onPress={() => handleDateSelect(date)}
-                disabled={!isAllowed}
+                onPress={() => onSelectDate(date)}
               >
+                {/* ✅ OPRAVENO: Stabilní dateBox - vždy stejné rozměry */}
                 <View style={[
                   styles.dateBox,
                   isSelected && styles.selectedDate,
                   isCurrent && !isSelected && styles.currentDate,
-                  !isAllowed && styles.disabledDate,
                 ]}>
                   <Text style={[
                     styles.dayText,
                     isSelected && styles.selectedText,
-                    !isAllowed && styles.disabledText,
                   ]}>
                     {date.toLocaleString('default', { weekday: 'short' }).slice(0, 3)}
                   </Text>
                   <Text style={[
                     styles.dateText,
                     isSelected && styles.selectedText,
-                    !isAllowed && styles.disabledText,
                   ]}>
                     {date.getDate()}
                   </Text>
@@ -266,20 +226,24 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: '#FFFFFF',
     paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
   },
   monthTitleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
     marginBottom: 15,
+    position: 'relative',
   },
   monthTitleButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   monthTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333333',
     textAlign: 'center',
@@ -287,25 +251,33 @@ const styles = StyleSheet.create({
   dropdownArrow: {
     fontSize: 12,
     color: '#666666',
-    marginLeft: 5,
+    marginLeft: 6,
   },
+  // ✅ OPRAVENO: Today button - identické rozměry pro obě stavy
   todayButton: {
+    position: 'absolute',
+    right: 0,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: '#FFB347',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#FFB347',
+    borderRadius: 16,  // ✅ ZMĚNĚNO: z 16 na 6
+  },
+  todayButtonHighlighted: {
+    position: 'absolute',
+    right: 0,
+    backgroundColor: '#FFB347',
+    borderWidth: 1,           // ✅ PŘIDÁNO: stejný border
+    borderColor: '#FFB347',   // ✅ PŘIDÁNO: border stejné barvy jako background
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,  // ✅ ZMĚNĚNO: z 16 na 6
   },
   todayButtonText: {
     color: '#FFB347',
     fontSize: 14,
     fontWeight: '600',
-  },
-  todayButtonHighlighted: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#FFB347',
   },
   todayButtonTextHighlighted: {
     color: '#FFFFFF',
@@ -314,17 +286,18 @@ const styles = StyleSheet.create({
   },
   weekContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 10,
+    justifyContent: 'space-between',
   },
   arrowButton: {
     padding: 10,
+    width: 40,
+    alignItems: 'center',
   },
   arrow: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333333',
+    color: '#FFB347',
   },
   daysContainer: {
     flexDirection: 'row',
@@ -333,18 +306,28 @@ const styles = StyleSheet.create({
   },
   dayContainer: {
     alignItems: 'center',
-    flex: 1,
+    width: (windowWidth - 90) / 7,
   },
+  // ✅ OPRAVENO: dateBox - stabilní rozměry pro všechny stavy
   dateBox: {
-    padding: 8,
-    borderRadius: 12,
+    padding: 2,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 44,
-    minHeight: 44,
+    minHeight: 65,
+    width: '85%',
+    borderWidth: 1.75,              // ✅ PŘIDÁNO: vždy má border
+    borderColor: 'transparent',  // ✅ PŘIDÁNO: defaultně průhledný
+  },
+  selectedDate: {
+    backgroundColor: '#FFB347',
+    borderColor: '#FFB347',  // ✅ ZMĚNĚNO: border stejné barvy jako background
+  },
+  currentDate: {
+    borderColor: '#FFB347',  // ✅ ZACHOVÁNO: jen změní barvu existujícího borderu
   },
   dayText: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: '600',
     color: '#666666',
     marginBottom: 2,
@@ -354,23 +337,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333333',
   },
-  selectedDate: {
-    backgroundColor: '#FFB347',
-  },
-  currentDate: {
-    borderWidth: 2,
-    borderColor: '#FFB347',
-  },
-  disabledDate: {
-    opacity: 0.3,
-  },
   selectedText: {
     color: '#FFFFFF',
   },
-  disabledText: {
-    color: '#CCCCCC',
-  },
-  // Month calendar styles
+  // Month calendar styles - beze změny
   monthModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -452,9 +422,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FFB347',
   },
-  disabledMonthDay: {
-    opacity: 0.3,
-  },
   monthDayText: {
     fontSize: 16,
     fontWeight: '500',
@@ -467,8 +434,5 @@ const styles = StyleSheet.create({
   currentMonthDayText: {
     color: '#FFB347',
     fontWeight: 'bold',
-  },
-  disabledMonthDayText: {
-    color: '#CCCCCC',
   },
 });
