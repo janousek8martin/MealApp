@@ -1,5 +1,5 @@
 // src/components/DailyMealPlan.tsx
-// 🔧 OPRAVED: Původní swipe přes celou obrazovku, bez Generate button
+// 🔧 OPRAVENO: Swipe s preview funkcionalitou
 
 import React, { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { 
@@ -159,30 +159,150 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
       removeMeal(selectedUser.id, currentDateStr, mealId);
     };
 
-    // Get current meal plan
-    const currentDateStr = selectedDate.toISOString().split('T')[0];
-    const currentMealPlan = getMealPlan(selectedUser.id, currentDateStr);
-    const currentMeals = currentMealPlan?.meals || [];
+    // ✅ PŘIDÁNO: Funkce pro render meal plan content
+    const renderMealPlanContent = (date: Date, isPreview = false) => {
+      const dateStr = date.toISOString().split('T')[0];
+      const mealPlan = getMealPlan(selectedUser.id, dateStr);
+      const meals = mealPlan?.meals || [];
+      
+      const sortedMeals = [...meals].sort((a, b) => {
+        const getTimeOrder = (meal: any) => {
+          if (meal.type === 'Breakfast') return 1;
+          if (meal.type === 'Snack' && meal.position === 'Between Breakfast and Lunch') return 2;
+          if (meal.type === 'Lunch') return 3;
+          if (meal.type === 'Snack' && meal.position === 'Between Lunch and Dinner') return 4;
+          if (meal.type === 'Dinner') return 5;
+          if (meal.type === 'Snack' && meal.position === 'Before Breakfast') return 0;
+          if (meal.type === 'Snack' && meal.position === 'After Dinner') return 6;
+          return 99;
+        };
+        return getTimeOrder(a) - getTimeOrder(b);
+      });
 
-    // Správné řazení meals podle časového pořadí
-    const sortedMeals = [...currentMeals].sort((a, b) => {
-      const getTimeOrder = (meal: any) => {
-        if (meal.type === 'Breakfast') return 1;
-        if (meal.type === 'Snack' && meal.position === 'Between Breakfast and Lunch') return 2;
-        if (meal.type === 'Lunch') return 3;
-        if (meal.type === 'Snack' && meal.position === 'Between Lunch and Dinner') return 4;
-        if (meal.type === 'Dinner') return 5;
-        if (meal.type === 'Snack' && meal.position === 'Before Breakfast') return 0;
-        if (meal.type === 'Snack' && meal.position === 'After Dinner') return 6;
-        return 99;
-      };
-      return getTimeOrder(a) - getTimeOrder(b);
-    });
+      return (
+        <ScrollView 
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={!isPreview}
+          scrollEnabled={!isPreview}
+          bounces={!isPreview}
+        >
+          {sortedMeals.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateIcon}>🍽️</Text>
+              <Text style={styles.emptyStateText}>No meals planned for this day</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Use the Generate button in the header to create an optimized meal plan
+              </Text>
+              
+              {!isPreview && selectedUser && (
+                <View style={styles.debugInfo}>
+                  <Text style={styles.debugTitle}>User Setup Status:</Text>
+                  <Text style={styles.debugItem}>
+                    TDCI: {selectedUser.tdci?.adjustedTDCI ? '✅' : '❌'} 
+                    {selectedUser.tdci?.adjustedTDCI && ` (${Math.round(selectedUser.tdci.adjustedTDCI)} cal)`}
+                  </Text>
+                  <Text style={styles.debugItem}>
+                    Meal Preferences: {selectedUser.mealPreferences ? '✅' : '❌'} 
+                    {selectedUser.mealPreferences?.snackPositions && ` (${selectedUser.mealPreferences.snackPositions.length} snacks)`}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            <>
+              {/* Meal Items */}
+              {sortedMeals.map((meal, index) => (
+                <View key={`${meal.id}-${isPreview ? 'preview' : 'current'}-${refreshKey}`} style={styles.mealItem}>
+                  <View style={styles.mealHeader}>
+                    <View style={styles.mealTypeContainer}>
+                      <Text style={styles.mealIcon}>
+                        {meal.type === 'Breakfast' ? '🥐' : 
+                         meal.type === 'Lunch' ? '🥗' : 
+                         meal.type === 'Dinner' ? '🍽️' : '🍎'}
+                      </Text>
+                      <Text style={styles.mealType}>{meal.type}</Text>
+                    </View>
+                    
+                    {meal.position && meal.position !== meal.type && (
+                      <Text style={styles.mealPosition}>({meal.position})</Text>
+                    )}
+                  </View>
+                  
+                  <Text style={styles.mealName}>
+                    {meal.name || 'Not planned yet'}
+                  </Text>
+                  
+                  <View style={styles.mealNutrition}>
+                    <Text style={styles.nutritionText}>
+                      Calories: {meal.calories || '--'} | 
+                      Protein: {meal.protein || '--'}g | 
+                      Carbs: {meal.carbs || '--'}g | 
+                      Fat: {meal.fat || '--'}g
+                    </Text>
+                  </View>
+                  
+                  {!isPreview && (
+                    <View style={styles.mealActions}>
+                      <TouchableOpacity 
+                        style={styles.editButton}
+                        onPress={() => console.log('Edit meal:', meal.id)}
+                      >
+                        <Text style={styles.editButtonText}>✏️ Edit</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={styles.deleteButton}
+                        onPress={() => {
+                          handleRemoveMeal(meal.id);
+                          setRefreshKey(prev => prev + 1);
+                        }}
+                      >
+                        <Text style={styles.deleteButtonText}>🗑️ Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              ))}
+              
+              {/* Daily totals */}
+              {!isPreview && (
+                <View style={styles.dailyTotals}>
+                  <Text style={styles.dailyTotalsTitle}>Daily Totals</Text>
+                  <Text style={styles.dailyTotalsText}>
+                    Calories: {sortedMeals.reduce((sum, meal) => sum + (meal.calories || 0), 0)} | 
+                    Protein: {sortedMeals.reduce((sum, meal) => sum + (meal.protein || 0), 0)}g | 
+                    Carbs: {sortedMeals.reduce((sum, meal) => sum + (meal.carbs || 0), 0)}g | 
+                    Fat: {sortedMeals.reduce((sum, meal) => sum + (meal.fat || 0), 0)}g
+                  </Text>
+                </View>
+              )}
+            </>
+          )}
+        </ScrollView>
+      );
+    };
 
-    // 🔧 OPRAVENO: Lepší rozlišení mezi swipe a scroll
+    // ✅ OPRAVENO: onGestureEvent s preview logikou
     const onGestureEvent = Animated.event(
       [{ nativeEvent: { translationX: swipeAnimation } }],
-      { useNativeDriver: true }
+      { 
+        useNativeDriver: true,
+        listener: (event: any) => {
+          const { translationX } = event.nativeEvent;
+          
+          // Preview logika během swipe
+          if (Math.abs(translationX) > 15) { // Snížený threshold pro rychlejší preview
+            if (translationX > 0 && (!previewDate || swipeDirection !== 'right')) {
+              setPreviewDate(getPreviousDay(selectedDate));
+              setSwipeDirection('right');
+            } else if (translationX < 0 && (!previewDate || swipeDirection !== 'left')) {
+              setPreviewDate(getNextDay(selectedDate));
+              setSwipeDirection('left');
+            }
+          }
+        }
+      }
     );
 
     const onHandlerStateChange = (event: any) => {
@@ -206,7 +326,10 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
           Animated.spring(swipeAnimation, {
             toValue: 0,
             useNativeDriver: true,
-          }).start();
+          }).start(() => {
+            setPreviewDate(null);
+            setSwipeDirection(null);
+          });
           return;
         }
         
@@ -245,14 +368,35 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
           Animated.spring(swipeAnimation, {
             toValue: 0,
             useNativeDriver: true,
-          }).start();
+          }).start(() => {
+            setPreviewDate(null);
+            setSwipeDirection(null);
+          });
         }
       }
     };
 
     return (
       <View style={styles.container}>
-        {/* 🔧 OPRAVENO: PanGestureHandler s lepší konfigurací pro scroll + swipe */}
+        {/* ✅ PŘIDÁNO: Preview container */}
+        {previewDate && (
+          <Animated.View 
+            style={[
+              styles.previewContainer,
+              {
+                transform: [{
+                  translateX: swipeDirection === 'left' 
+                    ? Animated.add(swipeAnimation, windowWidth)   // Left swipe = next day vpravo
+                    : Animated.add(swipeAnimation, -windowWidth)  // Right swipe = prev day vlevo
+                }]
+              }
+            ]}
+          >
+            {renderMealPlanContent(previewDate, true)}
+          </Animated.View>
+        )}
+
+        {/* Current page s gesture handler */}
         <PanGestureHandler
           onGestureEvent={onGestureEvent}
           onHandlerStateChange={onHandlerStateChange}
@@ -268,104 +412,7 @@ export const DailyMealPlan = forwardRef<DailyMealPlanRef, DailyMealPlanProps>(
               }
             ]}
           >
-            <ScrollView 
-              style={styles.scrollContainer}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={true}
-              bounces={true}
-              scrollEnabled={true}
-              nestedScrollEnabled={true}
-              keyboardShouldPersistTaps="handled"
-            >
-              {sortedMeals.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateIcon}>🍽️</Text>
-                  <Text style={styles.emptyStateText}>No meals planned for this day</Text>
-                  <Text style={styles.emptyStateSubtext}>
-                    Use the Generate button in the header to create an optimized meal plan
-                  </Text>
-                  
-                  {selectedUser && (
-                    <View style={styles.debugInfo}>
-                      <Text style={styles.debugTitle}>User Setup Status:</Text>
-                      <Text style={styles.debugItem}>
-                        TDCI: {selectedUser.tdci?.adjustedTDCI ? '✅' : '❌'} 
-                        {selectedUser.tdci?.adjustedTDCI && ` (${Math.round(selectedUser.tdci.adjustedTDCI)} cal)`}
-                      </Text>
-                      <Text style={styles.debugItem}>
-                        Meal Preferences: {selectedUser.mealPreferences ? '✅' : '❌'} 
-                        {selectedUser.mealPreferences?.snackPositions && ` (${selectedUser.mealPreferences.snackPositions.length} snacks)`}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              ) : (
-                <>
-                  {/* Meal Items */}
-                  {sortedMeals.map((meal, index) => (
-                    <View key={`${meal.id}-${refreshKey}`} style={styles.mealItem}>
-                      <View style={styles.mealHeader}>
-                        <View style={styles.mealTypeContainer}>
-                          <Text style={styles.mealIcon}>
-                            {meal.type === 'Breakfast' ? '🥐' : 
-                             meal.type === 'Lunch' ? '🥗' : 
-                             meal.type === 'Dinner' ? '🍽️' : '🍎'}
-                          </Text>
-                          <Text style={styles.mealType}>{meal.type}</Text>
-                        </View>
-                        
-                        {meal.position && meal.position !== meal.type && (
-                          <Text style={styles.mealPosition}>({meal.position})</Text>
-                        )}
-                      </View>
-                      
-                      <Text style={styles.mealName}>
-                        {meal.name || 'Not planned yet'}
-                      </Text>
-                      
-                      <View style={styles.mealNutrition}>
-                        <Text style={styles.nutritionText}>
-                          Calories: {meal.calories || '--'} | 
-                          Protein: {meal.protein || '--'}g | 
-                          Carbs: {meal.carbs || '--'}g | 
-                          Fat: {meal.fat || '--'}g
-                        </Text>
-                      </View>
-                      
-                      <View style={styles.mealActions}>
-                        <TouchableOpacity 
-                          style={styles.editButton}
-                          onPress={() => console.log('Edit meal:', meal.id)}
-                        >
-                          <Text style={styles.editButtonText}>✏️ Edit</Text>
-                        </TouchableOpacity>
-                        
-                        <TouchableOpacity 
-                          style={styles.deleteButton}
-                          onPress={() => {
-                            handleRemoveMeal(meal.id);
-                            setRefreshKey(prev => prev + 1);
-                          }}
-                        >
-                          <Text style={styles.deleteButtonText}>🗑️ Remove</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))}
-                  
-                  {/* Daily totals */}
-                  <View style={styles.dailyTotals}>
-                    <Text style={styles.dailyTotalsTitle}>Daily Totals</Text>
-                    <Text style={styles.dailyTotalsText}>
-                      Calories: {sortedMeals.reduce((sum, meal) => sum + (meal.calories || 0), 0)} | 
-                      Protein: {sortedMeals.reduce((sum, meal) => sum + (meal.protein || 0), 0)}g | 
-                      Carbs: {sortedMeals.reduce((sum, meal) => sum + (meal.carbs || 0), 0)}g | 
-                      Fat: {sortedMeals.reduce((sum, meal) => sum + (meal.fat || 0), 0)}g
-                    </Text>
-                  </View>
-                </>
-              )}
-            </ScrollView>
+            {renderMealPlanContent(selectedDate, false)}
           </Animated.View>
         </PanGestureHandler>
       </View>
@@ -379,6 +426,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
+  },
+  // ✅ PŘIDÁNO: Preview container style
+  previewContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: windowWidth,
+    height: '100%',
+    backgroundColor: '#f8f9fa',
+    opacity: 0.9,
   },
   animatedContainer: {
     flex: 1,
