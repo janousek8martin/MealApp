@@ -250,9 +250,23 @@ export const ProfileSettingsScreen: React.FC<ProfileSettingsScreenProps> = ({ on
     setMealPreferencesModalVisible(false);
   };
 
-  const handleSavePortionSizes = async (portionSizes: { [key: string]: number }) => {
+  const handleSavePortionSizes = async (
+    portionSizes: { [key: string]: number },
+    mealNutritionTargets?: { [key: string]: { calories: number; protein: number; carbs: number; fat: number } }
+  ) => {
     if (selectedUser) {
-      await updateUser(selectedUser.id, { portionSizes });
+      console.log('🍽️ Saving portion sizes data:', { portionSizes, mealNutritionTargets });
+      
+      // ✅ FIXED: Create proper update object with correct types
+      const updateData: Partial<User> = { 
+        portionSizes 
+      };
+      
+      if (mealNutritionTargets) {
+        updateData.mealNutritionTargets = mealNutritionTargets;
+      }
+      
+      await updateUser(selectedUser.id, updateData);
     }
     setPortionSizesModalVisible(false);
   };

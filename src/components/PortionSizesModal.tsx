@@ -11,7 +11,11 @@ interface PortionSizesModalProps {
   visible: boolean;
   onClose: () => void;
   currentUser: any;
-  onSave: (portionSizes: { [key: string]: number }) => void;
+  // ✅ MINIMÁLNÍ ZMĚNA: Update onSave to accept optional second parameter
+  onSave: (
+    portionSizes: { [key: string]: number },
+    mealNutritionTargets?: { [key: string]: { calories: number; protein: number; carbs: number; fat: number } }
+  ) => void;
 }
 
 interface MealData {
@@ -42,6 +46,8 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
   });
   const [selectedSnackPercentage, setSelectedSnackPercentage] = useState<number | null>(null);
   const [userModifiedMeals, setUserModifiedMeals] = useState<Set<string>>(new Set());
+  // ✅ NEW: Track if data is loading to prevent flickering
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   // Get user from store if currentUser is not provided
   const selectedUser = useUserStore(state => state.selectedUser);
@@ -52,27 +58,104 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
 
   useEffect(() => {
     if (visible) {
-      calculateDailyMacros();
-      setTimeout(() => {
-        loadMealData();
-      }, 100);
+      // ✅ RESET loading state when modal opens
+      setIsDataLoaded(false);
+      // ✅ LOAD DATA SYNCHRONOUSLY - macros are calculated inside loadMealData
+      loadMealData();
+    } else {
+      // ✅ RESET when modal closes
+      setIsDataLoaded(false);
     }
-  }, [visible, user]);
+  }, [visible, user, adjustedTDCI]);
+
+  // ✅ NEW: Function to recalculate all meals when TDCI changes
+  const recalculateAllMealsForNewTDCI = () => {
+    if (mealData.length === 0) return;
+    
+    console.log('🔄 Recalculating all meals for new TDCI...');
+    
+    const updatedMealData = mealData.map(meal => {
+      // Keep the same percentage, but recalculate nutrition values based on new TDCI
+      return calculateMealMacros(meal.name, meal.isMainMeal, meal.percentage);
+    });
+    
+    // Preserve expanded states
+    updatedMealData.forEach((updatedMeal, index) => {
+      if (mealData[index]) {
+        updatedMeal.expanded = mealData[index].expanded;
+      }
+    });
+    
+    setMealData(updatedMealData);
+    saveMealDataToStorage(updatedMealData);
+    
+    console.log('✅ All meals recalculated for new TDCI');
+  };
 
   // Load meal data from storage
   const loadMealData = async () => {
     try {
+      // ✅ CALCULATE MACROS FIRST - before any data loading
+      calculateDailyMacros();
+      
       const savedMealData = await AsyncStorage.getItem(`mealData_${user?.id}`);
       if (savedMealData) {
         const parsedMealData = JSON.parse(savedMealData);
-        // Update with current user's snack positions
-        updateSnacksInData(parsedMealData);
+        
+        // ✅ NEW: Check if TDCI changed since last save and auto-recalculate
+        const savedTDCI = await AsyncStorage.getItem(`savedTDCI_${user?.id}`);
+        const lastSavedTDCI = savedTDCI ? parseFloat(savedTDCI) : null;
+        
+        if (lastSavedTDCI && Math.abs(lastSavedTDCI - adjustedTDCI) > 10) {
+          console.log(`🔄 TDCI changed from ${lastSavedTDCI} to ${adjustedTDCI}, auto-recalculating meals on load...`);
+          
+          // Recalculate all meals with new TDCI but preserve percentages
+          const recalculatedMealData = parsedMealData.map((meal: MealData) => {
+            return calculateMealMacros(meal.name, meal.isMainMeal, meal.percentage);
+          });
+          
+          // Preserve expanded states
+          recalculatedMealData.forEach((updatedMeal: MealData, index: number) => {
+            if (parsedMealData[index]) {
+              updatedMeal.expanded = parsedMealData[index].expanded || false;
+            }
+          });
+          
+          // Update with current user's snack positions (in case they changed)
+          updateSnacksInData(recalculatedMealData);
+          
+          // Save the updated TDCI reference
+          await AsyncStorage.setItem(`savedTDCI_${user?.id}`, adjustedTDCI.toString());
+          
+          console.log('✅ Meals recalculated on load for new TDCI');
+        } else {
+          // No TDCI change, just update snacks normally
+          updateSnacksInData(parsedMealData);
+          
+          // Save current TDCI reference if not saved yet
+          if (!lastSavedTDCI) {
+            await AsyncStorage.setItem(`savedTDCI_${user?.id}`, adjustedTDCI.toString());
+          }
+        }
       } else {
+        // No saved data, create fresh and save TDCI reference
         resetMealData();
+        await AsyncStorage.setItem(`savedTDCI_${user?.id}`, adjustedTDCI.toString());
       }
+      
+      // ✅ MARK DATA AS LOADED - after all processing is complete
+      setIsDataLoaded(true);
     } catch (error) {
       console.error('Error loading meal data:', error);
       resetMealData();
+      // Save TDCI reference even on error
+      try {
+        await AsyncStorage.setItem(`savedTDCI_${user?.id}`, adjustedTDCI.toString());
+      } catch (saveError) {
+        console.error('Error saving TDCI reference:', saveError);
+      }
+      // ✅ MARK AS LOADED even on error
+      setIsDataLoaded(true);
     }
   };
 
@@ -80,6 +163,8 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
   const saveMealDataToStorage = async (data: MealData[]) => {
     try {
       await AsyncStorage.setItem(`mealData_${user?.id}`, JSON.stringify(data));
+      // ✅ NEW: Also save current TDCI reference when saving meal data
+      await AsyncStorage.setItem(`savedTDCI_${user?.id}`, adjustedTDCI.toString());
     } catch (error) {
       console.error('Error saving meal data:', error);
     }
@@ -91,19 +176,7 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
     const mainMeals = currentMealData.filter(meal => ['Breakfast', 'Lunch', 'Dinner'].includes(meal.name));
     let newMealData = [...mainMeals];
 
-    // Add snacks based on selected positions
-    snackPositions.forEach((position: string) => {
-      const existingSnack = currentMealData.find(meal => meal.name === position);
-      if (existingSnack) {
-        newMealData.push(existingSnack);
-      } else {
-        // Create new snack with default percentage
-        const snackPercentage = calculateDefaultSnackPercentage(snackPositions.length);
-        newMealData.push(calculateMealMacros(position, false, snackPercentage));
-      }
-    });
-
-    // Sort according to meal order
+    // Add snacks based on selected positions with proper meal order
     const mealOrder = [
       'Before Breakfast',
       'Breakfast', 
@@ -114,6 +187,21 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
       'After Dinner'
     ];
 
+    // Add snack meals
+    const snackMeals = snackPositions.map((position: string) => {
+      // Check if snack already exists
+      const existingSnack = currentMealData.find(meal => meal.name === position);
+      if (existingSnack) {
+        return existingSnack;
+      } else {
+        // Create new snack with default values
+        return calculateMealMacros(position, false, 10); // Default 10% for new snacks
+      }
+    });
+
+    newMealData = [...newMealData, ...snackMeals];
+    
+    // Sort according to meal order
     newMealData.sort((a, b) => {
       const indexA = mealOrder.indexOf(a.name);
       const indexB = mealOrder.indexOf(b.name);
@@ -121,19 +209,13 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
     });
 
     setMealData(newMealData);
+    saveMealDataToStorage(newMealData);
   };
 
-  const calculateDefaultSnackPercentage = (snackCount: number) => {
-    if (snackCount === 1) return 25;
-    if (snackCount === 2) return 12;
-    if (snackCount === 3) return 8;
-    return 10;
-  };
-
-  // Functions from MacronutrientRatiosModal
   const calculateLBM = () => {
-    const weight = parseFloat(user?.weight) || 0;
-    const bodyFat = parseFloat(user?.bodyFat) || 0;
+    if (!user?.weight || !user?.bodyFat) return 0;
+    const weight = parseFloat(user.weight);
+    const bodyFat = parseFloat(user.bodyFat);
     return weight * (1 - bodyFat / 100);
   };
 
@@ -175,14 +257,14 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
     const carbsCalories = adjustedTDCI - proteinCalories - fatCalories;
     const carbs = Math.round(carbsCalories / 4);
 
-    const proteinPercentage = Math.round((proteinCalories / adjustedTDCI) * 100);
-    const carbsPercentage = 100 - proteinPercentage - fatPercentage;
+    const proteinPercentageCalc = Math.round((proteinCalories / adjustedTDCI) * 100);
+    const carbsPercentage = 100 - proteinPercentageCalc - fatPercentage;
 
     setDailyMacros({
       protein,
       fat,
       carbs,
-      proteinPercentage,
+      proteinPercentage: proteinPercentageCalc,
       fatPercentage,
       carbsPercentage
     });
@@ -235,55 +317,52 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
       const percentage = meal.isMainMeal ? mainMealPercentage : 10;
       return calculateMealMacros(meal.name, meal.isMainMeal, percentage);
     });
-
+    
     setMealData(defaultMealData);
-    setSelectedSnackPercentage(null);
+    saveMealDataToStorage(defaultMealData);
   };
 
-  const calculateMealMacros = (name: string, isMainMeal: boolean, percentage: number): MealData => {
-    const calories = Math.round(adjustedTDCI * percentage / 100);
+  const calculateMealMacros = (mealName: string, isMainMeal: boolean, percentage: number) => {
+    const targetCalories = Math.round(adjustedTDCI * percentage / 100);
     
-    // Použijeme daily macros pokud jsou k dispozici, jinak fallback
-    const proteinPerc = dailyMacros.proteinPercentage || 25;
-    const carbsPerc = dailyMacros.carbsPercentage || 45;
-    const fatPerc = dailyMacros.fatPercentage || 30;
+    // Calculate macros based on daily ratios
+    const proteinCalories = Math.round(targetCalories * dailyMacros.proteinPercentage / 100);
+    const fatCalories = Math.round(targetCalories * dailyMacros.fatPercentage / 100);
+    const carbsCalories = targetCalories - proteinCalories - fatCalories;
     
-    const protein = Math.round((calories * proteinPerc / 100) / 4);
-    const carbs = Math.round((calories * carbsPerc / 100) / 4);
-    const fat = Math.round((calories * fatPerc / 100) / 9);
+    const protein = Math.round(proteinCalories / 4);
+    const fat = Math.round(fatCalories / 9);
+    const carbs = Math.round(carbsCalories / 4);
     
     return {
-      name,
+      name: mealName,
       isMainMeal,
       protein,
       carbs,
       fat,
-      kcal: calories,
+      kcal: targetCalories,
       percentage: Math.round(percentage),
       expanded: false
     };
   };
 
   const rebalanceMeals = (newMealData: MealData[], changedMealIndex: number, userModified: Set<string>) => {
-    const total = newMealData.reduce((sum, meal) => sum + meal.percentage, 0);
-    
-    if (Math.abs(total - 100) < 0.1) return newMealData; // Already balanced
-    
-    const difference = total - 100;
     const changedMeal = newMealData[changedMealIndex];
+    const currentTotal = newMealData.reduce((sum, meal) => sum + meal.percentage, 0);
+    const difference = currentTotal - 100;
+    
+    if (Math.abs(difference) < 0.1) return newMealData; // Already balanced
     
     if (changedMeal.isMainMeal) {
-      // Main meal changed - rebalance other NON-USER-MODIFIED main meals first
-      const otherMainMeals = newMealData.filter((meal, index) => 
-        meal.isMainMeal && index !== changedMealIndex && !userModified.has(meal.name)
+      // Main meal changed - rebalance NON-USER-MODIFIED main meals first
+      const nonModifiedMainMeals = newMealData.filter(meal => 
+        meal.isMainMeal && !userModified.has(meal.name) && meal.name !== changedMeal.name
       );
-      const snacks = newMealData.filter(meal => !meal.isMainMeal);
       
-      if (otherMainMeals.length > 0) {
-        // Try to rebalance among other non-modified main meals
-        const adjustmentPerMeal = difference / otherMainMeals.length;
+      if (nonModifiedMainMeals.length > 0) {
+        const adjustmentPerMeal = difference / nonModifiedMainMeals.length;
         
-        otherMainMeals.forEach(meal => {
+        nonModifiedMainMeals.forEach(meal => {
           const mealIndex = newMealData.findIndex(m => m.name === meal.name);
           newMealData[mealIndex].percentage = Math.max(1, meal.percentage - adjustmentPerMeal);
           newMealData[mealIndex] = {
@@ -300,11 +379,36 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
         const newTotal = newMealData.reduce((sum, meal) => sum + meal.percentage, 0);
         const remainingDifference = newTotal - 100;
         
-        if (Math.abs(remainingDifference) > 0.1 && snacks.length > 0) {
-          const snackAdjustment = remainingDifference / snacks.length;
-          snacks.forEach(snack => {
+        if (Math.abs(remainingDifference) > 0.1) {
+          const snacks = newMealData.filter(meal => !meal.isMainMeal);
+          if (snacks.length > 0) {
+            const snackAdjustment = remainingDifference / snacks.length;
+            snacks.forEach(snack => {
+              const snackIndex = newMealData.findIndex(m => m.name === snack.name);
+              newMealData[snackIndex].percentage = Math.max(1, snack.percentage - snackAdjustment);
+              newMealData[snackIndex] = {
+                ...calculateMealMacros(
+                  newMealData[snackIndex].name,
+                  newMealData[snackIndex].isMainMeal,
+                  newMealData[snackIndex].percentage
+                ),
+                expanded: newMealData[snackIndex].expanded
+              };
+            });
+          }
+        }
+      } else {
+        // All main meals are user-modified, adjust other snacks
+        const otherSnacks = newMealData.filter((meal, index) => 
+          !meal.isMainMeal && index !== changedMealIndex
+        );
+        
+        if (otherSnacks.length > 0) {
+          const adjustmentPerSnack = difference / otherSnacks.length;
+          
+          otherSnacks.forEach(snack => {
             const snackIndex = newMealData.findIndex(m => m.name === snack.name);
-            newMealData[snackIndex].percentage = Math.max(1, snack.percentage - snackAdjustment);
+            newMealData[snackIndex].percentage = Math.max(1, snack.percentage - adjustmentPerSnack);
             newMealData[snackIndex] = {
               ...calculateMealMacros(
                 newMealData[snackIndex].name,
@@ -315,21 +419,6 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
             };
           });
         }
-      } else if (snacks.length > 0) {
-        // Only snacks available for rebalancing
-        const adjustmentPerSnack = difference / snacks.length;
-        snacks.forEach(snack => {
-          const snackIndex = newMealData.findIndex(m => m.name === snack.name);
-          newMealData[snackIndex].percentage = Math.max(1, snack.percentage - adjustmentPerSnack);
-          newMealData[snackIndex] = {
-            ...calculateMealMacros(
-              newMealData[snackIndex].name,
-              newMealData[snackIndex].isMainMeal,
-              newMealData[snackIndex].percentage
-            ),
-            expanded: newMealData[snackIndex].expanded
-          };
-        });
       }
     } else {
       // Snack changed - rebalance NON-USER-MODIFIED main meals first
@@ -485,15 +574,33 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
     setSelectedSnackPercentage(percentage);
   };
 
+  // ✅ MINIMÁLNÍ ZMĚNA: Jen update saveMealData() funkce
   const saveMealData = () => {
     try {
-      // Convert meal data to portion sizes format for saving
+      // ✅ BACKWARD COMPATIBILITY: Keep original percentage format
       const portionData: { [key: string]: number } = {};
       mealData.forEach(meal => {
         portionData[meal.name] = meal.percentage / 100; // Convert percentage to decimal
       });
       
-      onSave(portionData);
+      // ✅ NEW: Also create absolute nutrition targets for mealStore
+      const mealNutritionTargets: { [key: string]: { calories: number; protein: number; carbs: number; fat: number } } = {};
+      mealData.forEach(meal => {
+        mealNutritionTargets[meal.name] = {
+          calories: meal.kcal,
+          protein: meal.protein,
+          carbs: meal.carbs,
+          fat: meal.fat
+        };
+      });
+      
+      console.log('🍽️ Saving portion sizes with absolute nutrition:', {
+        portionData, // Original percentage format
+        mealNutritionTargets // New absolute format
+      });
+      
+      // ✅ CHANGE: Pass both formats to parent (ProfileSettingsScreen expects this)
+      onSave(portionData, mealNutritionTargets);
       onClose();
     } catch (error) {
       console.error('Error saving meal data:', error);
@@ -522,71 +629,66 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
         <Text style={[styles.macroValue, { flex: 1 }]}>{meal.percentage}</Text>
         <View style={{ flex: 0.6, alignItems: 'center' }}>
           <Icon 
-            name={meal.expanded ? "expand-less" : "expand-more"} 
+            name={meal.expanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} 
             size={24} 
-            color="#FFB347" 
+            color="#666" 
           />
         </View>
       </TouchableOpacity>
-      
+
       {meal.expanded && (
         <View style={styles.expandedContent}>
+          <View style={styles.macroControlRow}>
+            <Text style={styles.macroLabel}>Percentage</Text>
+            <View style={styles.macroControls}>
+              <TouchableOpacity 
+                style={styles.controlButton} 
+                onPress={() => handlePercentageChange(index, -5)}
+              >
+                <Text style={styles.controlText}>-</Text>
+              </TouchableOpacity>
+              <Text style={styles.macroAmount}>{meal.percentage}%</Text>
+              <TouchableOpacity 
+                style={styles.controlButton} 
+                onPress={() => handlePercentageChange(index, 5)}
+              >
+                <Text style={styles.controlText}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <View style={styles.macroControlRow}>
             <Text style={styles.macroLabel}>Protein</Text>
             <View style={styles.macroControls}>
               <TouchableOpacity 
-                style={styles.controlButton}
+                style={styles.controlButton} 
                 onPress={() => handleMacroChange(index, 'protein', -5)}
               >
                 <Text style={styles.controlText}>-</Text>
               </TouchableOpacity>
               <Text style={styles.macroAmount}>{meal.protein}g</Text>
               <TouchableOpacity 
-                style={styles.controlButton}
+                style={styles.controlButton} 
                 onPress={() => handleMacroChange(index, 'protein', 5)}
               >
                 <Text style={styles.controlText}>+</Text>
               </TouchableOpacity>
             </View>
           </View>
-          
-          <View style={styles.macroControlRow}>
+
+          <View style={styles.macroControlRowLast}>
             <Text style={styles.macroLabel}>Fat</Text>
             <View style={styles.macroControls}>
               <TouchableOpacity 
-                style={styles.controlButton}
-                onPress={() => handleMacroChange(index, 'fat', -2)}
+                style={styles.controlButton} 
+                onPress={() => handleMacroChange(index, 'fat', -5)}
               >
                 <Text style={styles.controlText}>-</Text>
               </TouchableOpacity>
               <Text style={styles.macroAmount}>{meal.fat}g</Text>
               <TouchableOpacity 
-                style={styles.controlButton}
-                onPress={() => handleMacroChange(index, 'fat', 2)}
-              >
-                <Text style={styles.controlText}>+</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          
-          <View style={styles.macroControlRow}>
-            <Text style={styles.macroLabel}>Carbohydrates</Text>
-            <Text style={styles.macroAmount}>{meal.carbs}g</Text>
-          </View>
-          
-          <View style={styles.macroControlRowLast}>
-            <Text style={styles.macroLabel}>%TDCI</Text>
-            <View style={styles.macroControls}>
-              <TouchableOpacity 
-                style={styles.controlButton}
-                onPress={() => handlePercentageChange(index, -1)}
-              >
-                <Text style={styles.controlText}>-</Text>
-              </TouchableOpacity>
-              <Text style={styles.macroAmount}>{meal.percentage}%</Text>
-              <TouchableOpacity 
-                style={styles.controlButton}
-                onPress={() => handlePercentageChange(index, 1)}
+                style={styles.controlButton} 
+                onPress={() => handleMacroChange(index, 'fat', 5)}
               >
                 <Text style={styles.controlText}>+</Text>
               </TouchableOpacity>
@@ -597,22 +699,27 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
     </View>
   );
 
-  // Check if there are any snacks
+  // Check if there are any snacks to show the preset section
   const hasSnacks = mealData.some(meal => !meal.isMainMeal);
 
   return (
-    <Modal visible={visible} animationType="fade" transparent={true}>
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
       <View style={styles.overlay}>
         <View style={styles.modalContainer}>
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Portion Sizes</Text>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Icon name="close" size={24} color="#FFB347" />
+              <Icon name="close" size={24} color="#666" />
             </TouchableOpacity>
           </View>
 
-          {/* Daily Overview */}
+          {/* Overview Section */}
           <View style={styles.overviewSection}>
             <View style={styles.tdciRow}>
               <Text style={styles.tdciText}>Adjusted TDCI: {adjustedTDCI} kcal</Text>
@@ -621,59 +728,67 @@ export const PortionSizesModal: React.FC<PortionSizesModalProps> = ({
               </TouchableOpacity>
             </View>
             <Text style={styles.macroText}>
-              Protein {dailyMacros.protein}g   Fat {dailyMacros.fat}g   Carbohydrates {dailyMacros.carbs}g
+              Protein {dailyMacros.protein}g Fat {dailyMacros.fat}g Carbohydrates {dailyMacros.carbs}g
             </Text>
-            <Text style={styles.infoText}>
-              All meal percentages must total 100% TDCI
-            </Text>
+            <Text style={styles.infoText}>All meal percentages must total 100% TDCI</Text>
           </View>
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Table Header */}
-            <View style={styles.tableHeader}>
-              <Text style={[styles.headerCell, { flex: 1.6, textAlign: 'left', paddingRight: 10 }]}>Meals</Text>
-              <Text style={[styles.headerCell, { flex: 1.3, paddingLeft: 8 }]}>Protein</Text>
-              <Text style={[styles.headerCell, { flex: 1, paddingLeft: 8 }]}>Carbs</Text>
-              <Text style={[styles.headerCell, { flex: 1, paddingLeft: 8 }]}>Fat</Text>
-              <Text style={[styles.headerCell, { flex: 1, paddingLeft: 8 }]}>kcal</Text>
-              <Text style={[styles.headerCell, { flex: 1.2, paddingLeft: 8 }]}>%TDCI</Text>
-              <View style={{ flex: 0.5 }} />
+          {/* ✅ CONDITIONAL RENDERING: Only show content when data is loaded */}
+          {!isDataLoaded ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Loading...</Text>
             </View>
-
-            {/* Meal Containers */}
-            {mealData.map((meal, index) => renderMealContainer(meal, index))}
-
-            {/* Snack % Section */}
-            {hasSnacks && (
-              <View style={styles.presetSection}>
-                <Text style={styles.presetTitle}>Snack %</Text>
-                <View style={styles.presetButtons}>
-                  {[5, 10, 15, 20, 25].map((percentage) => (
-                    <TouchableOpacity
-                      key={percentage}
-                      style={[
-                        styles.presetButton,
-                        selectedSnackPercentage === percentage && styles.presetButtonSelected
-                      ]}
-                      onPress={() => handleSnackPreset(percentage)}
-                    >
-                      <Text style={[
-                        styles.presetButtonText,
-                        selectedSnackPercentage === percentage && styles.presetButtonTextSelected
-                      ]}>
-                        {percentage}%
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+          ) : (
+            <>
+              {/* Content */}
+              <ScrollView style={styles.content}>
+                {/* Table Header */}
+                <View style={styles.tableHeader}>
+                  <Text style={[styles.headerCell, { flex: 2, textAlign: 'left', paddingLeft: 8 }]}>Meals</Text>
+                  <Text style={[styles.headerCell, { flex: 0.6, paddingLeft: 8 }]}>Protein</Text>
+                  <Text style={[styles.headerCell, { flex: 1, paddingLeft: 8 }]}>Carbs</Text>
+                  <Text style={[styles.headerCell, { flex: 1, paddingLeft: 8 }]}>Fat</Text>
+                  <Text style={[styles.headerCell, { flex: 1, paddingLeft: 8 }]}>kcal</Text>
+                  <Text style={[styles.headerCell, { flex: 1.2, paddingLeft: 8 }]}>%TDCI</Text>
+                  <View style={{ flex: 0.5 }} />
                 </View>
-              </View>
-            )}
-          </ScrollView>
 
-          {/* Save Button */}
-          <TouchableOpacity style={styles.saveButton} onPress={saveMealData}>
-            <Text style={styles.saveButtonText}>Save</Text>
-          </TouchableOpacity>
+                {/* Meal Containers */}
+                {mealData.map((meal, index) => renderMealContainer(meal, index))}
+
+                {/* Snack % Section */}
+                {hasSnacks && (
+                  <View style={styles.presetSection}>
+                    <Text style={styles.presetTitle}>Snack %</Text>
+                    <View style={styles.presetButtons}>
+                      {[5, 10, 15, 20, 25].map((percentage) => (
+                        <TouchableOpacity
+                          key={percentage}
+                          style={[
+                            styles.presetButton,
+                            selectedSnackPercentage === percentage && styles.presetButtonSelected
+                          ]}
+                          onPress={() => handleSnackPreset(percentage)}
+                        >
+                          <Text style={[
+                            styles.presetButtonText,
+                            selectedSnackPercentage === percentage && styles.presetButtonTextSelected
+                          ]}>
+                            {percentage}%
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </ScrollView>
+
+              {/* Save Button */}
+              <TouchableOpacity style={styles.saveButton} onPress={saveMealData}>
+                <Text style={styles.saveButtonText}>Save</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
     </Modal>
@@ -916,5 +1031,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // ✅ NEW: Loading styles
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666666',
   },
 });

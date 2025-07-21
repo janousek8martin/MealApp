@@ -1,625 +1,620 @@
 // src/services/mealPlanGenerator/preparation/ValidationHelpers.ts
-// ✅ INPUT VALIDATION - Ensures data integrity for meal plan generation
+// 🔧 PHASE 1.1: ENHANCED with Portion Sizes Validation & Better Error Handling
 
 import { User } from '../../../stores/userStore';
-import { Recipe, Food } from '../../../stores/recipeStore';
-import { GenerationOptions } from '../HybridMealPlanGenerator';
 
 export interface ValidationResult {
   isValid: boolean;
   errors: string[];
   warnings: string[];
-  score: number; // 0-100, quality of input data
-}
-
-export interface UserValidationResult extends ValidationResult {
   missingFields: string[];
-  dataQuality: {
-    profileCompleteness: number; // 0-100
-    preferencesCompleteness: number; // 0-100
-    nutritionalDataQuality: number; // 0-100
+  score: number; // 0-100, higher is better
+}
+
+export interface PortionSizesValidation extends ValidationResult {
+  totalPortionWeight: number;
+  distributionAnalysis: {
+    mainMealsTotal: number;
+    snacksTotal: number;
+    isBalanced: boolean;
   };
-}
-
-export interface RecipeValidationResult extends ValidationResult {
-  validRecipes: Recipe[];
-  invalidRecipes: Array<{ recipe: Recipe; issues: string[] }>;
-  nutritionDataQuality: number; // 0-100
-}
-
-export interface FoodValidationResult extends ValidationResult {
-  validFoods: Food[];
-  invalidFoods: Array<{ food: Food; issues: string[] }>;
-  nutritionDataQuality: number; // 0-100
+  recommendations: string[];
 }
 
 /**
- * Comprehensive validation helpers for meal plan generation
+ * Enhanced validation helpers with portion sizes support
+ * Implements comprehensive user profile validation for meal generation
  */
 export class ValidationHelpers {
   
-  // ===== USER VALIDATION =====
-  
   /**
-   * Validate user data for meal plan generation
+   * ✅ ENHANCED: Comprehensive user profile validation with portion sizes
    */
-  static validateUser(user: User): UserValidationResult {
+  static validateUserProfile(user: User): ValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
     const missingFields: string[] = [];
-    
-    // Required fields
+    let score = 100;
+
+    console.log('🔍 Validating user profile for meal generation...');
+
+    // Basic profile validation
+    if (!user) {
+      return {
+        isValid: false,
+        errors: ['User profile is null or undefined'],
+        warnings: [],
+        missingFields: ['user'],
+        score: 0
+      };
+    }
+
     if (!user.id) {
       errors.push('User ID is required');
       missingFields.push('id');
-    }
-    
-    if (!user.name || user.name.trim() === '') {
-      errors.push('User name is required');
-      missingFields.push('name');
+      score -= 20;
     }
 
-    // TDCI validation (critical for meal planning)
+    // ✅ TDCI validation with better error handling
     if (!user.tdci) {
-      errors.push('TDCI data is required for meal planning');
+      errors.push('TDCI calculation is required for meal planning');
       missingFields.push('tdci');
+      score -= 30;
     } else {
-      if (!user.tdci.adjustedTDCI || user.tdci.adjustedTDCI <= 0) {
-        errors.push('Valid adjusted TDCI is required');
+      if (!user.tdci.adjustedTDCI) {
+        errors.push('Adjusted TDCI is required');
         missingFields.push('tdci.adjustedTDCI');
+        score -= 25;
       }
       
-      if (user.tdci.adjustedTDCI < 1000 || user.tdci.adjustedTDCI > 5000) {
+      if (user.tdci.adjustedTDCI && (user.tdci.adjustedTDCI < 1000 || user.tdci.adjustedTDCI > 5000)) {
         warnings.push(`TDCI of ${user.tdci.adjustedTDCI} calories seems unusual`);
+        score -= 5;
       }
     }
 
-    // Meal preferences validation
+    // ✅ MEAL PREFERENCES validation (critical for portion sizes)
     if (!user.mealPreferences) {
       errors.push('Meal preferences are required');
       missingFields.push('mealPreferences');
+      score -= 25;
     } else {
       if (!user.mealPreferences.snackPositions) {
         warnings.push('No snack positions defined');
+        score -= 5;
       } else if (user.mealPreferences.snackPositions.length > 5) {
         warnings.push('More than 5 snacks per day may be excessive');
+        score -= 5;
       }
     }
 
-    // Portion sizes validation
-    if (!user.portionSizes) {
-      warnings.push('Portion sizes not configured, using defaults');
-      missingFields.push('portionSizes');
-    } else {
-      const { breakfast, lunch, dinner, snack } = user.portionSizes;
-      
-      if (breakfast && (breakfast < 0.1 || breakfast > 5)) {
-        warnings.push(`Breakfast portion size (${breakfast}x) seems unusual`);
-      }
-      if (lunch && (lunch < 0.1 || lunch > 5)) {
-        warnings.push(`Lunch portion size (${lunch}x) seems unusual`);
-      }
-      if (dinner && (dinner < 0.1 || dinner > 5)) {
-        warnings.push(`Dinner portion size (${dinner}x) seems unusual`);
-      }
-      if (snack && (snack < 0.1 || snack > 2)) {
-        warnings.push(`Snack portion size (${snack}x) seems unusual`);
-      }
+    // ✅ ENHANCED: Portion sizes validation (PHASE 1.1 focus)
+    const portionValidation = this.validatePortionSizes(user);
+    if (!portionValidation.isValid) {
+      errors.push(...portionValidation.errors);
+      score -= 20;
+    }
+    warnings.push(...portionValidation.warnings);
+    if (portionValidation.warnings.length > 0) {
+      score -= Math.min(10, portionValidation.warnings.length * 2);
     }
 
-    // ✅ OPRAVA: Physical data validation - parseFloat pro string values
+    // ✅ PHYSICAL DATA validation with parseFloat support
     if (!user.age) {
       warnings.push('Age not set');
       missingFields.push('age');
+      score -= 5;
     } else {
       const ageNum = parseFloat(user.age);
-      if (ageNum < 12 || ageNum > 120) {
+      if (isNaN(ageNum) || ageNum < 12 || ageNum > 120) {
         warnings.push(`Age of ${user.age} seems unusual`);
+        score -= 3;
       }
     }
 
     if (!user.weight) {
       warnings.push('Weight not set');
       missingFields.push('weight');
+      score -= 5;
     } else {
       const weightNum = parseFloat(user.weight);
-      if (weightNum < 30 || weightNum > 300) {
+      if (isNaN(weightNum) || weightNum < 30 || weightNum > 300) {
         warnings.push(`Weight of ${user.weight}kg seems unusual`);
+        score -= 3;
       }
     }
 
     if (!user.height) {
       warnings.push('Height not set');
       missingFields.push('height');
+      score -= 5;
     } else {
       const heightNum = parseFloat(user.height);
-      if (heightNum < 100 || heightNum > 250) {
+      if (isNaN(heightNum) || heightNum < 100 || heightNum > 250) {
         warnings.push(`Height of ${user.height}cm seems unusual`);
+        score -= 3;
       }
     }
 
-    // Calculate data quality scores
-    const profileCompleteness = this.calculateProfileCompleteness(user);
-    const preferencesCompleteness = this.calculatePreferencesCompleteness(user);
-    const nutritionalDataQuality = this.calculateNutritionalDataQuality(user);
-    
-    const overallScore = (profileCompleteness + preferencesCompleteness + nutritionalDataQuality) / 3;
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-      warnings,
-      score: overallScore,
-      missingFields,
-      dataQuality: {
-        profileCompleteness,
-        preferencesCompleteness,
-        nutritionalDataQuality
-      }
-    };
-  }
-
-  /**
-   * Calculate profile completeness score
-   */
-  private static calculateProfileCompleteness(user: User): number {
-    let score = 0;
-    let maxScore = 0;
-
-    // Required fields (higher weight)
-    maxScore += 30;
-    if (user.id && user.name) score += 30;
-
-    // Physical data
-    maxScore += 20;
-    if (user.age && user.weight && user.height && user.gender) score += 20;
-
-    // Activity level
-    maxScore += 15;
-    if (user.activityMultiplier) score += 15;
-
-    // Fitness goals
-    maxScore += 15;
-    if (user.fitnessGoal) score += 15;
-
-    // Additional data
-    maxScore += 20;
-    if (user.workoutDays && user.workoutDays.length > 0) score += 10;
-    // ✅ OPRAVA: Odebrání neexistující property allergens
-    if (user.avoidMeals !== undefined) score += 10; // Zvýšeno z 5 na 10
-
-    return Math.round((score / maxScore) * 100);
-  }
-
-  /**
-   * Calculate preferences completeness score
-   */
-  private static calculatePreferencesCompleteness(user: User): number {
-    let score = 0;
-    let maxScore = 0;
-
-    // Meal preferences (critical)
-    maxScore += 40;
-    if (user.mealPreferences) score += 40;
-
-    // Portion sizes
-    maxScore += 30;
-    if (user.portionSizes) {
-      if (user.portionSizes.breakfast) score += 7.5;
-      if (user.portionSizes.lunch) score += 7.5;
-      if (user.portionSizes.dinner) score += 7.5;
-      if (user.portionSizes.snack) score += 7.5;
-    }
-
-    // Avoid meals
-    maxScore += 30; // ✅ OPRAVA: Zvýšeno z 15 na 30 kvůli odebrání allergens
-    if (user.avoidMeals !== undefined) score += 30;
-
-    return Math.round((score / maxScore) * 100);
-  }
-
-  /**
-   * Calculate nutritional data quality score
-   */
-  private static calculateNutritionalDataQuality(user: User): number {
-    let score = 0;
-    let maxScore = 0;
-
-    // TDCI (most critical)
-    maxScore += 60;
-    if (user.tdci?.adjustedTDCI) {
-      score += 50;
-      if (user.tdci.adjustedTDCI >= 1200 && user.tdci.adjustedTDCI <= 4000) {
-        score += 10; // Reasonable range
-      }
-    }
-
-    // ✅ OPRAVA: Odebrání neexistující property bmr
-    // BMR section removed as it doesn't exist in User type
-
-    // Activity multiplier
-    maxScore += 20; // ✅ OPRAVA: Zvýšeno z 10 na 20
-    if (user.activityMultiplier) score += 20;
-
-    // Fitness goal alignment
-    maxScore += 20; // ✅ OPRAVA: Zvýšeno z 10 na 20
-    if (user.fitnessGoal) score += 20;
-
-    return Math.round((score / maxScore) * 100);
-  }
-
-  // ===== RECIPE VALIDATION =====
-
-  /**
-   * Validate recipe data for meal planning
-   */
-  static validateRecipes(recipes: Recipe[]): RecipeValidationResult {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const validRecipes: Recipe[] = [];
-    const invalidRecipes: Array<{ recipe: Recipe; issues: string[] }> = [];
-
-    recipes.forEach(recipe => {
-      const recipeIssues: string[] = [];
-
-      // Required fields
-      if (!recipe.id) recipeIssues.push('Missing recipe ID');
-      if (!recipe.name || recipe.name.trim() === '') {
-        recipeIssues.push('Missing recipe name');
-      }
-
-      // ✅ OPRAVA: Nutritional data validation - parseFloat pro string values
-      const caloriesNum = parseFloat(recipe.calories || '0');
-      if (!recipe.calories || caloriesNum <= 0) {
-        recipeIssues.push('Missing or invalid calories');
-      } else if (caloriesNum > 2000) {
-        recipeIssues.push('Very high calories (>2000)');
-      }
-
-      const proteinNum = parseFloat(recipe.protein || '0');
-      if (recipe.protein && proteinNum < 0) {
-        recipeIssues.push('Negative protein value');
-      }
-      
-      const carbsNum = parseFloat(recipe.carbs || '0');
-      if (recipe.carbs && carbsNum < 0) {
-        recipeIssues.push('Negative carbs value');
-      }
-      
-      const fatNum = parseFloat(recipe.fat || '0');
-      if (recipe.fat && fatNum < 0) {
-        recipeIssues.push('Negative fat value');
-      }
-
-      // Ingredients validation
-      if (!recipe.ingredients || recipe.ingredients.length === 0) {
-        recipeIssues.push('No ingredients specified');
-      } else {
-        recipe.ingredients.forEach((ing, index) => {
-          if (!ing.name || ing.name.trim() === '') {
-            recipeIssues.push(`Ingredient ${index + 1} missing name`);
-          }
-          if (!ing.amount || ing.amount.trim() === '') {
-            recipeIssues.push(`Ingredient ${index + 1} missing amount`);
-          }
-        });
-      }
-
-      // ✅ OPRAVA: Prep time validation - parseFloat pro string values
-      const prepTimeNum = parseFloat(recipe.prepTime || '0');
-      if (recipe.prepTime && prepTimeNum < 0) {
-        recipeIssues.push('Negative prep time');
-      }
-
-      if (recipeIssues.length === 0) {
-        validRecipes.push(recipe);
-      } else {
-        invalidRecipes.push({ recipe, issues: recipeIssues });
-      }
-    });
-
-    // Overall validation
-    if (validRecipes.length === 0) {
-      errors.push('No valid recipes available for meal planning');
-    }
-
-    if (invalidRecipes.length > 0) {
-      warnings.push(`${invalidRecipes.length} recipes have issues and will be excluded`);
-    }
-
-    const nutritionDataQuality = this.calculateRecipeNutritionQuality(validRecipes);
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-      warnings,
-      score: validRecipes.length > 0 ? Math.min(100, (validRecipes.length / recipes.length) * 100) : 0,
-      validRecipes,
-      invalidRecipes,
-      nutritionDataQuality
-    };
-  }
-
-  /**
-   * Calculate recipe nutrition data quality
-   */
-  private static calculateRecipeNutritionQuality(recipes: Recipe[]): number {
-    if (recipes.length === 0) return 0;
-
-    let totalScore = 0;
-
-    recipes.forEach(recipe => {
-      let recipeScore = 0;
-      let maxRecipeScore = 0;
-
-      // ✅ OPRAVA: Calories validation - parseFloat pro string values
-      maxRecipeScore += 30;
-      const caloriesNum = parseFloat(recipe.calories || '0');
-      if (recipe.calories && caloriesNum > 0) recipeScore += 30;
-
-      // Macronutrients
-      maxRecipeScore += 45;
-      const proteinNum = parseFloat(recipe.protein || '0');
-      if (recipe.protein && proteinNum >= 0) recipeScore += 15;
-      const carbsNum = parseFloat(recipe.carbs || '0');
-      if (recipe.carbs && carbsNum >= 0) recipeScore += 15;
-      const fatNum = parseFloat(recipe.fat || '0');
-      if (recipe.fat && fatNum >= 0) recipeScore += 15;
-
-      // ✅ OPRAVA: Additional nutrition data - odstranění neexistujících properties
-      maxRecipeScore += 25;
-      // Removed fiber, sugar, sodium, cholesterol checks as they don't exist in Recipe type
-      // Placeholder scoring for this section
-      recipeScore += 25; // Give full points since we can't check these properties
-
-      totalScore += (recipeScore / maxRecipeScore) * 100;
-    });
-
-    return Math.round(totalScore / recipes.length);
-  }
-
-  // ===== FOOD VALIDATION =====
-
-  /**
-   * Validate food data for meal planning
-   */
-  static validateFoods(foods: Food[]): FoodValidationResult {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const validFoods: Food[] = [];
-    const invalidFoods: Array<{ food: Food; issues: string[] }> = [];
-
-    foods.forEach(food => {
-      const foodIssues: string[] = [];
-
-      // Required fields
-      if (!food.id) foodIssues.push('Missing food ID');
-      if (!food.name || food.name.trim() === '') {
-        foodIssues.push('Missing food name');
-      }
-
-      // ✅ OPRAVA: Nutritional data validation - parseFloat pro string values
-      const caloriesNum = parseFloat(food.calories || '0');
-      if (!food.calories || caloriesNum <= 0) {
-        foodIssues.push('Missing or invalid calories per 100g');
-      }
-
-      const proteinNum = parseFloat(food.protein || '0');
-      if (food.protein && proteinNum < 0) {
-        foodIssues.push('Negative protein value');
-      }
-      
-      const carbsNum = parseFloat(food.carbs || '0');
-      if (food.carbs && carbsNum < 0) {
-        foodIssues.push('Negative carbs value');
-      }
-      
-      const fatNum = parseFloat(food.fat || '0');
-      if (food.fat && fatNum < 0) {
-        foodIssues.push('Negative fat value');
-      }
-
-      // ✅ OPRAVA: Logical validation - použití parseFloat
-      if (food.calories && food.protein && food.carbs && food.fat) {
-        const calculatedCalories = (proteinNum * 4) + (carbsNum * 4) + (fatNum * 9);
-        const deviation = Math.abs(caloriesNum - calculatedCalories) / caloriesNum;
-        
-        if (deviation > 0.3) { // More than 30% deviation
-          foodIssues.push('Calories don\'t match macronutrient breakdown');
-        }
-      }
-
-      if (foodIssues.length === 0) {
-        validFoods.push(food);
-      } else {
-        invalidFoods.push({ food, issues: foodIssues });
-      }
-    });
-
-    // Overall validation
-    if (validFoods.length === 0) {
-      errors.push('No valid foods available for meal planning');
-    }
-
-    if (invalidFoods.length > 0) {
-      warnings.push(`${invalidFoods.length} foods have issues and will be excluded`);
-    }
-
-    const nutritionDataQuality = this.calculateFoodNutritionQuality(validFoods);
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-      warnings,
-      score: validFoods.length > 0 ? Math.min(100, (validFoods.length / foods.length) * 100) : 0,
-      validFoods,
-      invalidFoods,
-      nutritionDataQuality
-    };
-  }
-
-  /**
-   * Calculate food nutrition data quality
-   */
-  private static calculateFoodNutritionQuality(foods: Food[]): number {
-    if (foods.length === 0) return 0;
-
-    let totalScore = 0;
-
-    foods.forEach(food => {
-      let foodScore = 0;
-      let maxFoodScore = 0;
-
-      // ✅ OPRAVA: Calories validation - parseFloat pro string values
-      maxFoodScore += 25;
-      const caloriesNum = parseFloat(food.calories || '0');
-      if (food.calories && caloriesNum > 0) foodScore += 25;
-
-      // Macronutrients
-      maxFoodScore += 60;
-      const proteinNum = parseFloat(food.protein || '0');
-      if (food.protein !== undefined && proteinNum >= 0) foodScore += 20;
-      const carbsNum = parseFloat(food.carbs || '0');
-      if (food.carbs !== undefined && carbsNum >= 0) foodScore += 20;
-      const fatNum = parseFloat(food.fat || '0');
-      if (food.fat !== undefined && fatNum >= 0) foodScore += 20;
-
-      // ✅ OPRAVA: Additional nutrition data - odstranění neexistujících properties
-      maxFoodScore += 15;
-      // Removed fiber, sugar, sodium checks as they don't exist in Food type
-      // Placeholder scoring for this section
-      foodScore += 15; // Give full points since we can't check these properties
-
-      totalScore += (foodScore / maxFoodScore) * 100;
-    });
-
-    return Math.round(totalScore / foods.length);
-  }
-
-  // ===== GENERATION OPTIONS VALIDATION =====
-
-  /**
-   * Validate generation options
-   */
-  static validateGenerationOptions(options: GenerationOptions): ValidationResult {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    // Required fields
-    if (!options.user) {
-      errors.push('User is required for meal plan generation');
-    }
-
-    if (!options.date) {
-      errors.push('Date is required for meal plan generation');
+    if (!user.bodyFat) {
+      warnings.push('Body fat percentage not set');
+      missingFields.push('bodyFat');
+      score -= 5;
     } else {
-      // Validate date format
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(options.date)) {
-        errors.push('Date must be in YYYY-MM-DD format');
-      } else {
-        const date = new Date(options.date);
-        if (isNaN(date.getTime())) {
-          errors.push('Invalid date provided');
-        }
-      }
-    }
-
-    // Mode validation
-    if (!['speed', 'balanced', 'quality'].includes(options.mode)) {
-      errors.push('Mode must be "speed", "balanced", or "quality"');
-    }
-
-    // Preferences validation
-    if (options.preferences) {
-      const prefs = options.preferences;
+      const bodyFatNum = parseFloat(user.bodyFat);
+      const minBodyFat = user.gender === 'Male' ? 8 : 15;
+      const maxBodyFat = user.gender === 'Male' ? 35 : 45;
       
-      if (prefs.maxPrepTime && prefs.maxPrepTime < 0) {
-        warnings.push('Negative max prep time');
-      }
-      if (prefs.maxPrepTime && prefs.maxPrepTime > 300) {
-        warnings.push('Very long max prep time (>5 hours)');
-      }
-
-      if (prefs.minProtein && prefs.minProtein < 0) {
-        warnings.push('Negative minimum protein');
-      }
-      if (prefs.maxCalories && prefs.maxCalories < 0) {
-        warnings.push('Negative maximum calories');
-      }
-
-      if (prefs.varietyLevel && !['low', 'medium', 'high'].includes(prefs.varietyLevel)) {
-        warnings.push('Variety level must be "low", "medium", or "high"');
+      if (isNaN(bodyFatNum) || bodyFatNum < minBodyFat || bodyFatNum > maxBodyFat) {
+        warnings.push(`Body fat of ${user.bodyFat}% seems unusual for ${user.gender}`);
+        score -= 3;
       }
     }
 
-    // Calculate score based on completeness and validity
-    let score = 100;
-    score -= errors.length * 25; // Major penalty for errors
-    score -= warnings.length * 5; // Minor penalty for warnings
-    score = Math.max(0, score);
+    // Gender validation
+    if (!user.gender) {
+      warnings.push('Gender not specified, using Male as default');
+      missingFields.push('gender');
+      score -= 3;
+    }
 
-    return {
-      isValid: errors.length === 0,
-      errors,
-      warnings,
-      score
-    };
-  }
+    // ✅ ACTIVITY LEVEL validation (optional field from userStore)
+    // Note: activityLevel doesn't exist on User type, but activityMultiplier does
+    if (!user.activityMultiplier) {
+      warnings.push('Activity multiplier not set');
+      missingFields.push('activityMultiplier');
+      score -= 5;
+    } else if (user.activityMultiplier < 1.2 || user.activityMultiplier > 2.2) {
+      warnings.push(`Activity multiplier ${user.activityMultiplier} seems unusual (normal range: 1.2-2.2)`);
+      score -= 3;
+    }
 
-  // ===== COMPREHENSIVE VALIDATION =====
+    // ✅ DIETARY RESTRICTIONS validation
+    if (user.avoidMeals && user.avoidMeals.length > 10) {
+      warnings.push('Very restrictive diet with many avoided foods');
+      score -= 5;
+    }
 
-  /**
-   * Perform comprehensive validation for meal plan generation
-   */
-  static validateAll(
-    user: User,
-    recipes: Recipe[],
-    foods: Food[],
-    options: GenerationOptions
-  ): {
-    isValid: boolean;
-    user: UserValidationResult;
-    recipes: RecipeValidationResult;
-    foods: FoodValidationResult;
-    options: ValidationResult;
-    overallScore: number;
-    canProceed: boolean;
-  } {
-    const userValidation = this.validateUser(user);
-    const recipeValidation = this.validateRecipes(recipes);
-    const foodValidation = this.validateFoods(foods);
-    const optionsValidation = this.validateGenerationOptions(options);
+    const finalScore = Math.max(0, Math.min(100, score));
+    const isValid = errors.length === 0 && finalScore >= 60;
 
-    const overallScore = Math.round(
-      (userValidation.score * 0.4 +
-       recipeValidation.score * 0.3 +
-       foodValidation.score * 0.2 +
-       optionsValidation.score * 0.1)
-    );
-
-    const isValid = 
-      userValidation.isValid &&
-      recipeValidation.isValid &&
-      foodValidation.isValid &&
-      optionsValidation.isValid;
-
-    // Can proceed if critical requirements are met
-    const canProceed = 
-      userValidation.isValid &&
-      (recipeValidation.validRecipes.length > 0 || foodValidation.validFoods.length > 0) &&
-      optionsValidation.isValid;
+    console.log('✅ User profile validation result:', {
+      isValid,
+      score: finalScore,
+      errorsCount: errors.length,
+      warningsCount: warnings.length
+    });
 
     return {
       isValid,
-      user: userValidation,
-      recipes: recipeValidation,
-      foods: foodValidation,
-      options: optionsValidation,
-      overallScore,
-      canProceed
+      errors,
+      warnings,
+      missingFields,
+      score: finalScore
+    };
+  }
+
+  /**
+   * ✅ NEW: Comprehensive portion sizes validation (PHASE 1.1 focus)
+   */
+  static validatePortionSizes(user: User): PortionSizesValidation {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const missingFields: string[] = [];
+    const recommendations: string[] = [];
+    let score = 100;
+
+    console.log('🔍 Validating portion sizes configuration...');
+
+    if (!user.portionSizes) {
+      warnings.push('Portion sizes not configured, using defaults');
+      missingFields.push('portionSizes');
+      score -= 15;
+      
+      return {
+        isValid: true, // Not critical error, defaults will be used
+        errors,
+        warnings,
+        missingFields,
+        score,
+        totalPortionWeight: 1.0, // Default total
+        distributionAnalysis: {
+          mainMealsTotal: 0.75,
+          snacksTotal: 0.25,
+          isBalanced: true
+        },
+        recommendations: ['Configure custom portion sizes for better meal targeting']
+      };
+    }
+
+    const portionSizes = user.portionSizes;
+    console.log('📊 Analyzing portion sizes:', portionSizes);
+
+    // ✅ MAIN MEALS validation
+    const requiredMainMeals = ['Breakfast', 'Lunch', 'Dinner'];
+    let mainMealsTotal = 0;
+
+    requiredMainMeals.forEach(meal => {
+      const lowerKey = meal.toLowerCase();
+      const portion = portionSizes[meal] ?? portionSizes[lowerKey];
+      
+      if (portion === undefined) {
+        warnings.push(`Missing portion size for ${meal}`);
+        missingFields.push(`portionSizes.${lowerKey}`);
+        score -= 5;
+      } else {
+        mainMealsTotal += portion;
+        
+        // Individual meal validation
+        if (portion < 0.1) {
+          warnings.push(`Very small portion size for ${meal}: ${portion.toFixed(2)}`);
+          score -= 3;
+        } else if (portion > 1.0) {
+          warnings.push(`Very large portion size for ${meal}: ${portion.toFixed(2)}`);
+          score -= 3;
+        } else if (portion <= 0) {
+          errors.push(`Invalid portion size for ${meal}: ${portion}`);
+          score -= 10;
+        }
+        
+        // Reasonable range recommendations
+        if (portion < 0.15 || portion > 0.5) {
+          recommendations.push(`Consider adjusting ${meal} portion size (recommended: 0.15-0.5)`);
+        }
+      }
+    });
+
+    // ✅ SNACKS validation based on snackPositions
+    let snacksTotal = 0;
+    const snackPositions = user.mealPreferences?.snackPositions || [];
+    
+    if (snackPositions.length > 0) {
+      // Check general snack portion size
+      if (portionSizes.snack !== undefined) {
+        const snackPortion = portionSizes.snack;
+        snacksTotal = snackPortion * snackPositions.length; // Total across all snack positions
+        
+        if (snackPortion < 0.05) {
+          warnings.push(`Very small snack portion size: ${snackPortion.toFixed(2)}`);
+          score -= 2;
+        } else if (snackPortion > 0.25) {
+          warnings.push(`Large snack portion size: ${snackPortion.toFixed(2)}`);
+          score -= 2;
+        } else if (snackPortion <= 0) {
+          errors.push(`Invalid snack portion size: ${snackPortion}`);
+          score -= 8;
+        }
+      } else {
+        // Check individual snack position portion sizes
+        snackPositions.forEach((position: string) => {
+          const snackPortion = portionSizes[position];
+          if (snackPortion !== undefined) {
+            snacksTotal += snackPortion;
+            
+            if (snackPortion < 0.05) {
+              warnings.push(`Very small portion for ${position}: ${snackPortion.toFixed(2)}`);
+              score -= 2;
+            } else if (snackPortion > 0.25) {
+              warnings.push(`Large portion for ${position}: ${snackPortion.toFixed(2)}`);
+              score -= 2;
+            } else if (snackPortion <= 0) {
+              errors.push(`Invalid portion size for ${position}: ${snackPortion}`);
+              score -= 8;
+            }
+          } else {
+            warnings.push(`Missing portion size for snack position: ${position}`);
+            missingFields.push(`portionSizes.${position}`);
+            score -= 3;
+          }
+        });
+        
+        if (snacksTotal === 0) {
+          warnings.push('No snack portion sizes configured');
+          score -= 5;
+        }
+      }
+    }
+
+    // ✅ TOTAL PORTION WEIGHT analysis
+    const totalPortionWeight = mainMealsTotal + snacksTotal;
+    
+    console.log('📊 Portion distribution analysis:', {
+      mainMealsTotal: mainMealsTotal.toFixed(2),
+      snacksTotal: snacksTotal.toFixed(2),
+      totalPortionWeight: totalPortionWeight.toFixed(2)
+    });
+
+    // Total weight validation
+    if (totalPortionWeight < 0.7) {
+      warnings.push(`Total portion weight seems low: ${totalPortionWeight.toFixed(2)}`);
+      recommendations.push('Consider increasing portion sizes to meet daily calorie needs');
+      score -= 5;
+    } else if (totalPortionWeight > 1.5) {
+      warnings.push(`Total portion weight seems high: ${totalPortionWeight.toFixed(2)}`);
+      recommendations.push('Consider reducing portion sizes to avoid overeating');
+      score -= 5;
+    }
+
+    // ✅ DISTRIBUTION BALANCE analysis
+    const isBalanced = this.analyzePortionBalance(mainMealsTotal, snacksTotal, totalPortionWeight);
+    if (!isBalanced.isBalanced) {
+      if (isBalanced.issue) warnings.push(isBalanced.issue);
+      if (isBalanced.recommendation) recommendations.push(isBalanced.recommendation);
+      score -= 3;
+    }
+
+    // ✅ CONSISTENCY validation
+    const consistencyIssues = this.checkPortionConsistency(portionSizes, requiredMainMeals);
+    warnings.push(...consistencyIssues.warnings);
+    recommendations.push(...consistencyIssues.recommendations);
+    score -= consistencyIssues.penaltyPoints;
+
+    const finalScore = Math.max(0, Math.min(100, score));
+    const isValid = errors.length === 0;
+
+    console.log('✅ Portion sizes validation result:', {
+      isValid,
+      score: finalScore,
+      totalPortionWeight: totalPortionWeight.toFixed(2),
+      mainMealsTotal: mainMealsTotal.toFixed(2),
+      snacksTotal: snacksTotal.toFixed(2)
+    });
+
+    return {
+      isValid,
+      errors,
+      warnings,
+      missingFields,
+      score: finalScore,
+      totalPortionWeight,
+      distributionAnalysis: {
+        mainMealsTotal,
+        snacksTotal,
+        isBalanced: isBalanced.isBalanced
+      },
+      recommendations
+    };
+  }
+
+  /**
+   * ✅ NEW: Analyze portion balance between main meals and snacks
+   */
+  private static analyzePortionBalance(
+    mainMealsTotal: number, 
+    snacksTotal: number, 
+    totalWeight: number
+  ): { isBalanced: boolean; issue?: string; recommendation?: string } {
+    
+    if (totalWeight === 0) {
+      return {
+        isBalanced: false,
+        issue: 'No portion sizes configured',
+        recommendation: 'Configure portion sizes for all meals'
+      };
+    }
+
+    const mainMealPercentage = mainMealsTotal / totalWeight;
+    const snackPercentage = snacksTotal / totalWeight;
+
+    // Main meals should typically be 60-85% of total intake
+    if (mainMealPercentage < 0.6) {
+      return {
+        isBalanced: false,
+        issue: `Main meals too small (${(mainMealPercentage * 100).toFixed(0)}% of total)`,
+        recommendation: 'Increase main meal portions or reduce snack portions'
+      };
+    }
+
+    if (mainMealPercentage > 0.9) {
+      return {
+        isBalanced: false,
+        issue: `Main meals too large (${(mainMealPercentage * 100).toFixed(0)}% of total)`,
+        recommendation: 'Reduce main meal portions or add healthy snacks'
+      };
+    }
+
+    // Snacks should typically be 10-40% of total intake
+    if (snackPercentage > 0.4) {
+      return {
+        isBalanced: false,
+        issue: `Too many snacks (${(snackPercentage * 100).toFixed(0)}% of total)`,
+        recommendation: 'Reduce snack portions and focus on main meals'
+      };
+    }
+
+    return { isBalanced: true };
+  }
+
+  /**
+   * ✅ NEW: Check consistency between different portion size formats
+   */
+  private static checkPortionConsistency(
+    portionSizes: { [key: string]: number },
+    requiredMainMeals: string[]
+  ): { warnings: string[]; recommendations: string[]; penaltyPoints: number } {
+    
+    const warnings: string[] = [];
+    const recommendations: string[] = [];
+    let penaltyPoints = 0;
+
+    // Check for both capitalized and lowercase versions
+    requiredMainMeals.forEach(meal => {
+      const capitalizedPortion = portionSizes[meal];
+      const lowercasePortion = portionSizes[meal.toLowerCase()];
+      
+      if (capitalizedPortion !== undefined && lowercasePortion !== undefined) {
+        if (Math.abs(capitalizedPortion - lowercasePortion) > 0.01) {
+          warnings.push(`Inconsistent portion sizes for ${meal}: ${capitalizedPortion} vs ${lowercasePortion}`);
+          recommendations.push(`Use consistent naming for ${meal} portion sizes`);
+          penaltyPoints += 2;
+        }
+      }
+    });
+
+    // Check for extreme variations between main meals
+    const mainMealPortions = requiredMainMeals
+      .map(meal => portionSizes[meal] ?? portionSizes[meal.toLowerCase()])
+      .filter(p => p !== undefined);
+
+    if (mainMealPortions.length >= 2) {
+      const min = Math.min(...mainMealPortions);
+      const max = Math.max(...mainMealPortions);
+      const ratio = max / min;
+
+      if (ratio > 3) {
+        warnings.push(`Large variation in main meal sizes (${ratio.toFixed(1)}x difference)`);
+        recommendations.push('Consider more balanced portion sizes across main meals');
+        penaltyPoints += 3;
+      }
+    }
+
+    return { warnings, recommendations, penaltyPoints };
+  }
+
+  /**
+   * ✅ ENHANCED: Validate meal generation prerequisites
+   */
+  static validateMealGenerationPrerequisites(user: User, date: string): ValidationResult {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const missingFields: string[] = [];
+    let score = 100;
+
+    console.log('🔍 Validating meal generation prerequisites...');
+
+    // Basic user validation
+    const userValidation = this.validateUserProfile(user);
+    if (!userValidation.isValid) {
+      errors.push('User profile validation failed');
+      errors.push(...userValidation.errors);
+      score = Math.min(score, userValidation.score);
+    }
+    warnings.push(...userValidation.warnings);
+
+    // Date validation
+    if (!date) {
+      errors.push('Date is required for meal generation');
+      missingFields.push('date');
+      score -= 20;
+    } else {
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        errors.push('Invalid date format');
+        score -= 15;
+      }
+    }
+
+    // ✅ CRITICAL REQUIREMENTS for meal generation
+    if (!user.tdci?.adjustedTDCI) {
+      errors.push('TDCI calculation required for calorie targeting');
+      score -= 30;
+    }
+
+    if (!user.mealPreferences) {
+      errors.push('Meal preferences required for meal structure');
+      score -= 25;
+    }
+
+    // ✅ PORTION SIZES specific validation for meal generation
+    if (!user.portionSizes) {
+      warnings.push('No custom portion sizes - will use defaults');
+      score -= 10;
+    } else {
+      const portionValidation = this.validatePortionSizes(user);
+      if (!portionValidation.isValid) {
+        errors.push('Portion sizes validation failed');
+        score -= 15;
+      }
+    }
+
+    const finalScore = Math.max(0, Math.min(100, score));
+    const isValid = errors.length === 0;
+
+    console.log('✅ Meal generation prerequisites validation:', {
+      isValid,
+      score: finalScore,
+      canGenerate: isValid && finalScore >= 50
+    });
+
+    return {
+      isValid,
+      errors,
+      warnings,
+      missingFields,
+      score: finalScore
+    };
+  }
+
+  /**
+   * ✅ FIXED: Generate portion sizes recommendations
+   */
+  static generatePortionSizesRecommendations(user: User): string[] {
+    const recommendations: string[] = [];
+    
+    if (!user.portionSizes) {
+      recommendations.push('Configure custom portion sizes for personalized meal planning');
+      return recommendations;
+    }
+
+    const validation = this.validatePortionSizes(user);
+    recommendations.push(...validation.recommendations);
+
+    // ✅ FIXED: Use correct User interface properties
+    // fitnessGoal.goal instead of goal, activityMultiplier instead of activityLevel
+    const userGoal = user.fitnessGoal?.goal;
+    const userActivityMultiplier = user.activityMultiplier;
+
+    if (userGoal === 'Lose Fat' && validation.totalPortionWeight > 1.1) {
+      recommendations.push('Consider reducing portion sizes to support fat loss goals');
+    }
+
+    if (userGoal === 'Build Muscle' && validation.totalPortionWeight < 0.9) {
+      recommendations.push('Consider increasing portion sizes to support muscle building goals');
+    }
+
+    if (userActivityMultiplier && userActivityMultiplier > 1.8 && validation.totalPortionWeight < 1.0) {
+      recommendations.push('Very active individuals may need larger portion sizes');
+    }
+
+    return recommendations;
+  }
+
+  /**
+   * ✅ UTILITY: Quick validation check for critical meal generation fields
+   */
+  static hasMinimumRequirements(user: User): boolean {
+    return !!(
+      user &&
+      user.id &&
+      user.tdci?.adjustedTDCI &&
+      user.mealPreferences
+    );
+  }
+
+  /**
+   * ✅ UTILITY: Get validation summary for UI display
+   */
+  static getValidationSummary(user: User): {
+    status: 'excellent' | 'good' | 'needs_attention' | 'incomplete';
+    score: number;
+    criticalIssues: number;
+    warnings: number;
+    canGenerateMeals: boolean;
+  } {
+    const validation = this.validateUserProfile(user);
+    
+    let status: 'excellent' | 'good' | 'needs_attention' | 'incomplete';
+    if (validation.score >= 90) status = 'excellent';
+    else if (validation.score >= 75) status = 'good';
+    else if (validation.score >= 50) status = 'needs_attention';
+    else status = 'incomplete';
+
+    return {
+      status,
+      score: validation.score,
+      criticalIssues: validation.errors.length,
+      warnings: validation.warnings.length,
+      canGenerateMeals: validation.isValid && validation.score >= 60
     };
   }
 }
-
-export default ValidationHelpers;

@@ -42,7 +42,16 @@ export interface User {
     snackPositions: string[]; // ["Before Breakfast", "Between Breakfast and Lunch", etc.]
   };
   portionSizes?: {
-    [key: string]: number;
+    [key: string]: number; // Backward compatibility - percentage values
+  };
+  // ✅ FIXED: Add mealNutritionTargets to User interface
+  mealNutritionTargets?: {
+    [key: string]: {
+      calories: number;
+      protein: number;
+      carbs: number;
+      fat: number;
+    };
   };
   avoidMeals?: string[];
   maxMealRepetition?: number;
