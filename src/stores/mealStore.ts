@@ -1,12 +1,14 @@
 // src/stores/mealStore.ts
-// 🔧 PHASE 1.1: PORTION SIZES INTEGRATION - COMPLETED
-// ✅ Fixed all TypeScript errors and prioritized mealNutritionTargets
+// 🔧 PHASE 1.2: RECIPE SOURCE FIX - Uses recipeStore instead of API fallback
+// ✅ Fixed all TypeScript errors and implemented missing methods
 
 import { create } from 'zustand';
 import { Meal, MealPlan, getMealNutrition } from '../types/meal';
+import { Recipe, useRecipeStore } from '../stores/recipeStore';
 import { RecipeFromAPI } from '../services/foodApiService';
 import { NutritionCalculator, NutritionalTargets } from '../services/mealPlanGenerator/preparation/NutritionCalculator';
 
+// ✅ KEPT: Original APIRecipe interface for backward compatibility
 export interface APIRecipe extends RecipeFromAPI {
   categories: string[];
   ingredients: Array<{
@@ -22,7 +24,7 @@ export interface APIRecipe extends RecipeFromAPI {
 interface MealStore {
   mealPlans: Record<string, MealPlan>;
   
-  // API recepty
+  // ✅ KEPT: API recepty pro backward compatibility
   apiRecipes: APIRecipe[];
   isRecipeDatabaseInitialized: boolean;
   lastAPIUpdate: number | null;
@@ -42,11 +44,11 @@ interface MealStore {
   setMealPlans: (newMealPlans: Record<string, MealPlan>) => void;
 }
 
-// ✅ OPRAVENÁ HELPER FUNKCE: Výpočet meal targets s prioritizací mealNutritionTargets
+// ✅ HELPER FUNKCE: Výpočet meal targets s prioritizací mealNutritionTargets
 const calculateMealTargetsFromPortionSizes = (userProfile: any, dailyCalories: number): { [key: string]: number } => {
   console.log('🎯 Calculating meal targets from user portion sizes');
   
-  // ✅ PRIORITIZE mealNutritionTargets over portionSizes (PHASE 1 requirement)
+  // ✅ PRIORITA: mealNutritionTargets over portionSizes (PHASE 1 requirement)
   if (userProfile.mealNutritionTargets) {
     console.log('✅ Using absolute calorie targets from mealNutritionTargets');
     const mealTargets: { [key: string]: number } = {};
@@ -147,7 +149,99 @@ const safeNutritionValue = (value: number | undefined, fallback: number = 0): nu
   return typeof value === 'number' && !isNaN(value) ? value : fallback;
 };
 
-// ✅ ENHANCED: Filter funkce s proper avoid meals logic
+// ✅ ENHANCED: Filter funkce s proper avoid meals logic for Recipe interface
+const filterRecipesByUserPreferences = (recipes: Recipe[], userProfile: any): Recipe[] => {
+  console.log('🔍 Filtering recipes by user preferences');
+  console.log('🚫 User avoid meals:', userProfile.avoidMeals);
+
+  const filtered = recipes.filter(recipe => {
+    // ✅ FIXED: Handle Recipe interface nutrition values (strings)
+    const recipeCalories = safeNutritionValue(parseInt(recipe.calories));
+    const recipeProtein = safeNutritionValue(parseInt(recipe.protein));
+
+    // ✅ PROPER AVOID MEALS FILTERING: Check foodTypes, allergens, and ingredients
+    if (userProfile.avoidMeals && userProfile.avoidMeals.length > 0) {
+      let avoidList: string[] = [];
+      
+      // Handle both array and object formats
+      if (Array.isArray(userProfile.avoidMeals)) {
+        avoidList = userProfile.avoidMeals;
+      } else if (typeof userProfile.avoidMeals === 'object') {
+        const avoidObj = userProfile.avoidMeals as { foodTypes?: string[]; allergens?: string[] };
+        avoidList = [...(avoidObj.foodTypes || []), ...(avoidObj.allergens || [])];
+      }
+
+      // 1. Check recipe name for avoided terms
+      const nameContainsAvoided = avoidList.some(avoid => 
+        recipe.name.toLowerCase().includes(avoid.toLowerCase())
+      );
+
+      // 2. Check recipe foodTypes
+      const foodTypeMatches = avoidList.some(avoid => 
+        recipe.foodTypes.some(foodType => 
+          foodType.toLowerCase().includes(avoid.toLowerCase())
+        )
+      );
+
+      // 3. Check recipe allergens  
+      const allergenMatches = avoidList.some(avoid =>
+        recipe.allergens.some(allergen =>
+          allergen.toLowerCase().includes(avoid.toLowerCase())
+        )
+      );
+
+      if (nameContainsAvoided || foodTypeMatches || allergenMatches) {
+        console.log(`❌ Filtered out ${recipe.name} - contains avoided food: ${avoidList.join(', ')}`);
+        return false;
+      }
+    }
+
+    // Filtr podle kalorií - použij rozumný upper limit
+    if (userProfile.tdci?.adjustedTDCI) {
+      const maxCaloriesPerMeal = userProfile.tdci.adjustedTDCI * 0.6;
+      if (recipeCalories > maxCaloriesPerMeal) {
+        console.log(`❌ Filtered out ${recipe.name} - too many calories (${recipeCalories} > ${maxCaloriesPerMeal})`);
+        return false;
+      }
+    }
+
+    // Filtr podle minimálního obsahu bílkovin (relaxed pro snacks)
+    const isSnack = recipe.categories.includes('Snack');
+    if (recipeProtein < 3 && !isSnack) {
+      console.log(`❌ Filtered out ${recipe.name} - too little protein (${recipeProtein}g)`);
+      return false;
+    }
+
+    return true;
+  });
+
+  console.log('📊 Filtered recipes:', filtered.length);
+  console.log('✅ Remaining recipes:', filtered.map(r => r.name));
+  return filtered;
+};
+
+// ✅ NEW: Get recipes by meal type from Recipe interface
+const getRecipesByMealType = (recipes: Recipe[], mealType: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack'): Recipe[] => {
+  return recipes.filter(recipe => recipe.categories.includes(mealType));
+};
+
+// ✅ NEW: Convert Recipe to compatible format for NutritionCalculator
+const convertRecipeForCalculator = (recipe: Recipe): any => {
+  return {
+    id: recipe.id,
+    name: recipe.name,
+    calories: parseInt(recipe.calories),
+    protein: parseInt(recipe.protein), 
+    carbs: parseInt(recipe.carbs),
+    fat: parseInt(recipe.fat),
+    type: recipe.categories[0], // Use first category as type
+    categories: recipe.categories,
+    foodTypes: recipe.foodTypes,
+    allergens: recipe.allergens
+  };
+};
+
+// ✅ KEPT: Original filter function for APIRecipe backward compatibility
 const filterAPIRecipesByUserPreferences = (recipes: APIRecipe[], userProfile: any): APIRecipe[] => {
   console.log('🔍 Filtering API recipes by user preferences');
   console.log('🚫 User avoid meals:', userProfile.avoidMeals);
@@ -225,15 +319,15 @@ export const useMealStore = create<MealStore>((set, get) => ({
   // Existující data
   mealPlans: {},
   
-  // API recipe management
+  // ✅ KEPT: API recipe management pro backward compatibility
   apiRecipes: [],
   isRecipeDatabaseInitialized: false,
   lastAPIUpdate: null,
 
-  // 🔧 PHASE 1.1: HLAVNÍ OPRAVA - generateMealPlan s portion sizes integration
+  // 🔧 PHASE 1.2: HLAVNÍ OPRAVA - generateMealPlan používá recipeStore
   generateMealPlan: async (userId: string, date: string, userProfile: any) => {
     try {
-      console.log('🎯 Starting meal plan generation with PORTION SIZES INTEGRATION');
+      console.log('🎯 Starting meal plan generation with RECIPE STORE INTEGRATION');
       console.log('📋 User profile summary:', {
         userId,
         date,
@@ -245,21 +339,16 @@ export const useMealStore = create<MealStore>((set, get) => ({
         portionSizes: userProfile.portionSizes
       });
 
-      // Inicializuj databázi pokud ještě není
-      if (!get().isRecipeDatabaseInitialized) {
-        console.log('🚀 Initializing recipe database from API...');
-        await get().initializeRecipeDatabase();
-      }
-
-      const allRecipes = get().apiRecipes;
-      console.log('📚 Available API recipes:', allRecipes.length);
+      // ✅ KLÍČOVÁ ZMĚNA: Použij recipeStore místo API fallback
+      const allRecipes = useRecipeStore.getState().recipes;
+      console.log('📚 Available recipes from recipeStore:', allRecipes.length);
 
       if (allRecipes.length === 0) {
-        throw new Error('No recipes available from API');
+        throw new Error('No recipes available from recipeStore');
       }
 
       // Filtruj podle preferencí
-      const filteredRecipes = filterAPIRecipesByUserPreferences(allRecipes, userProfile);
+      const filteredRecipes = filterRecipesByUserPreferences(allRecipes, userProfile);
       console.log('🔍 Recipes after filtering:', filteredRecipes.length);
 
       if (filteredRecipes.length === 0) {
@@ -269,7 +358,7 @@ export const useMealStore = create<MealStore>((set, get) => ({
       // Vymaž existující plán
       get().resetDay(userId, date);
 
-      // ✅ KLÍČOVÁ ZMĚNA: Použij portion sizes místo hardcoded percentages
+      // ✅ Použij portion sizes/meal nutrition targets
       const dailyCalories = userProfile.tdci?.adjustedTDCI || 2000;
       const mealTargets = calculateMealTargetsFromPortionSizes(userProfile, dailyCalories);
 
@@ -280,8 +369,7 @@ export const useMealStore = create<MealStore>((set, get) => ({
       let totalMealsGenerated = 0;
 
       for (const mealType of mainMealTypes) {
-        const availableRecipes = get().getRecipesByMealType(mealType)
-          .filter(recipe => filteredRecipes.includes(recipe));
+        const availableRecipes = getRecipesByMealType(filteredRecipes, mealType);
 
         if (availableRecipes.length === 0) {
           console.warn(`⚠️ No ${mealType} recipes available`);
@@ -308,8 +396,9 @@ export const useMealStore = create<MealStore>((set, get) => ({
         };
 
         // ✅ SCALING SELECTION: Use selectBestRecipe with tolerance checking
+        const convertedRecipes = availableRecipes.map(convertRecipeForCalculator);
         const scalingResult = NutritionCalculator.selectBestRecipe(
-          availableRecipes, 
+          convertedRecipes, 
           scaledDailyTargets,
           'high' // High priority for main meals
         );
@@ -342,8 +431,7 @@ export const useMealStore = create<MealStore>((set, get) => ({
       const snackPositions = userProfile.mealPreferences?.snackPositions || [];
       
       for (const snackPosition of snackPositions) {
-        const snackRecipes = get().getRecipesByMealType('Snack')
-          .filter(recipe => filteredRecipes.includes(recipe));
+        const snackRecipes = getRecipesByMealType(filteredRecipes, 'Snack');
 
         if (snackRecipes.length === 0) {
           console.warn('⚠️ No snack recipes available');
@@ -370,8 +458,9 @@ export const useMealStore = create<MealStore>((set, get) => ({
         };
 
         // ✅ SNACK SCALING SELECTION: Use selectBestRecipe for snacks
+        const convertedSnackRecipes = snackRecipes.map(convertRecipeForCalculator);
         const snackScalingResult = NutritionCalculator.selectBestRecipe(
-          snackRecipes,
+          convertedSnackRecipes,
           scaledSnackTargets,
           'medium' // Medium priority for snacks
         );
@@ -439,67 +528,7 @@ export const useMealStore = create<MealStore>((set, get) => ({
     }
   },
 
-  // ✅ FALLBACK: Simple generation s portion sizes support
-  generateSimpleFallbackPlan: (userId: string, date: string, userProfile: any) => {
-    console.log('🔄 Executing simple fallback meal plan generation');
-    
-    try {
-      get().resetDay(userId, date);
-      
-      // ✅ OPRAVA: Použij portion sizes i v fallback
-      const dailyCalories = userProfile.tdci?.adjustedTDCI || 2000;
-      const mealTargets = calculateMealTargetsFromPortionSizes(userProfile, dailyCalories);
-      
-      // Simple fallback recepty s defined nutrition values
-      const fallbackRecipes = [
-        { name: 'Oatmeal with Banana', calories: 250, protein: 8, carbs: 45, fat: 5, type: 'Breakfast' },
-        { name: 'Turkey Sandwich', calories: 300, protein: 25, carbs: 30, fat: 12, type: 'Lunch' },
-        { name: 'Grilled Salmon', calories: 320, protein: 35, carbs: 5, fat: 18, type: 'Dinner' },
-        { name: 'Greek Yogurt', calories: 150, protein: 15, carbs: 12, fat: 6, type: 'Snack' },
-        { name: 'Apple with Peanut Butter', calories: 180, protein: 8, carbs: 15, fat: 12, type: 'Snack' }
-      ];
-
-      // Generuj hlavní jídla s portion sizes targeting
-      ['Breakfast', 'Lunch', 'Dinner'].forEach(mealType => {
-        const recipe = fallbackRecipes.find(r => r.type === mealType);
-        if (recipe) {
-          get().addMeal(userId, date, {
-            type: mealType as 'Breakfast' | 'Lunch' | 'Dinner',
-            name: recipe.name,
-            position: mealType,
-            calories: recipe.calories,
-            protein: recipe.protein,
-            carbs: recipe.carbs,
-            fat: recipe.fat
-          });
-        }
-      });
-
-      // Přidej snacks pokud jsou nakonfigurované
-      const snackPositions = userProfile.mealPreferences?.snackPositions || [];
-      snackPositions.forEach((position: string) => {
-        const snackRecipe = fallbackRecipes.find(r => r.type === 'Snack') || fallbackRecipes[3];
-        get().addMeal(userId, date, {
-          type: 'Snack',
-          name: snackRecipe.name,
-          position: position,
-          calories: snackRecipe.calories,
-          protein: snackRecipe.protein,
-          carbs: snackRecipe.carbs,
-          fat: snackRecipe.fat
-        });
-      });
-
-      console.log('✅ Fallback plan generated successfully');
-      return true;
-
-    } catch (error) {
-      console.error('💥 Fallback generation failed:', error);
-      return false;
-    }
-  },
-
-  // 🔧 PHASE 1.0: API Recipe Management - OPTIMIZED fallback approach
+  // ✅ KEPT: Original initializeRecipeDatabase for backward compatibility
   initializeRecipeDatabase: async () => {
     try {
       console.log('🚀 Starting recipe database initialization...');
@@ -560,6 +589,7 @@ export const useMealStore = create<MealStore>((set, get) => ({
     }
   },
 
+  // ✅ KEPT: Original search methods
   searchAPIRecipes: async (query: string) => {
     const allRecipes = get().apiRecipes;
     
@@ -586,6 +616,74 @@ export const useMealStore = create<MealStore>((set, get) => ({
   getRecipesByMealType: (mealType: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack') => {
     const allRecipes = get().apiRecipes;
     return allRecipes.filter(recipe => recipe.type === mealType);
+  },
+
+  // ✅ FALLBACK: Simple generation s portion sizes support
+  generateSimpleFallbackPlan: (userId: string, date: string, userProfile: any) => {
+    console.log('🔄 Executing simple fallback meal plan generation');
+    
+    try {
+      get().resetDay(userId, date);
+      
+      // ✅ OPRAVA: Použij portion sizes i v fallback
+      const dailyCalories = userProfile.tdci?.adjustedTDCI || 2000;
+      const mealTargets = calculateMealTargetsFromPortionSizes(userProfile, dailyCalories);
+      
+      // Simple fallback recepty s defined nutrition values
+      const fallbackRecipes = [
+        { name: 'Oatmeal with Banana', calories: 250, protein: 8, carbs: 45, fat: 5, type: 'Breakfast' },
+        { name: 'Turkey Sandwich', calories: 300, protein: 25, carbs: 30, fat: 12, type: 'Lunch' },
+        { name: 'Grilled Chicken', calories: 320, protein: 35, carbs: 5, fat: 18, type: 'Dinner' },
+        { name: 'Greek Yogurt', calories: 130, protein: 15, carbs: 8, fat: 5, type: 'Snack' },
+        { name: 'Apple with Almonds', calories: 190, protein: 6, carbs: 25, fat: 8, type: 'Snack' }
+      ];
+
+      // Generate main meals with simple selection
+      const mainMealTypes = ['Breakfast', 'Lunch', 'Dinner'];
+      mainMealTypes.forEach(mealType => {
+        const recipe = fallbackRecipes.find(r => r.type === mealType);
+        if (recipe) {
+          const targetCalories = mealTargets[mealType] || dailyCalories * 0.33;
+          const scaleFactor = targetCalories / recipe.calories;
+          
+          get().addMeal(userId, date, {
+            type: mealType as any,
+            name: recipe.name,
+            calories: Math.round(recipe.calories * scaleFactor),
+            protein: Math.round(recipe.protein * scaleFactor),
+            carbs: Math.round(recipe.carbs * scaleFactor),
+            fat: Math.round(recipe.fat * scaleFactor)
+          });
+        }
+      });
+
+      // Generate snacks
+      const snackPositions = userProfile.mealPreferences?.snackPositions || [];
+      snackPositions.forEach((position: string) => {
+        const snackRecipe = fallbackRecipes.find(r => r.type === 'Snack');
+        if (snackRecipe) {
+          const targetCalories = mealTargets[position] || mealTargets.Snack || dailyCalories * 0.1;
+          const scaleFactor = targetCalories / snackRecipe.calories;
+          
+          get().addMeal(userId, date, {
+            type: 'Snack',
+            name: snackRecipe.name,
+            position: position,
+            calories: Math.round(snackRecipe.calories * scaleFactor),
+            protein: Math.round(snackRecipe.protein * scaleFactor),
+            carbs: Math.round(snackRecipe.carbs * scaleFactor),
+            fat: Math.round(snackRecipe.fat * scaleFactor)
+          });
+        }
+      });
+
+      console.log('✅ Fallback generation completed');
+      return true;
+
+    } catch (error) {
+      console.error('💥 Fallback generation failed:', error);
+      return false;
+    }
   },
 
   // ✅ EXISTING METHODS - cleaned and consistent
