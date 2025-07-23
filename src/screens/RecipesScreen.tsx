@@ -1,513 +1,251 @@
 // src/screens/RecipesScreen.tsx
+// 🍽️ Recipes Screen - Recipes + Ingredients + Foods & Drinks tabs
+
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, FlatList } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Recipe, Food, useRecipeStore } from '../stores/recipeStore';
-import { RecipeCard } from '../components/RecipeCard';
-import { FoodCard } from '../components/FoodCard';
-import { FilterModal } from '../components/FilterModal';
-import RecipeDetailScreen from './RecipeDetailScreen';
-import FoodDetailScreen from './FoodDetailScreen';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  TouchableOpacity,
+  ScrollView,
+} from 'react-native';
 
-type ActiveTab = 'Recipes' | 'Foods';
-type ViewMode = 'list' | 'recipeDetail' | 'foodDetail';
+// Import the corrected tabs
+import { IngredientsTab } from '../components/IngredientsTab';
+import { FoodsAndDrinksTab } from '../components/FoodsAndDrinksTab';
 
-interface RecipesScreenProps {
-  navigation?: {
-    navigate: (screen: string, params?: any) => void;
-  };
-}
+type TabType = 'recipes' | 'ingredients' | 'foods';
 
-export const RecipesScreen: React.FC<RecipesScreenProps> = ({ navigation }) => {
-  const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<ActiveTab>('Recipes');
-  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [selectedRecipeForDetail, setSelectedRecipeForDetail] = useState<Recipe | null>(null);
-  const [selectedFoodForDetail, setSelectedFoodForDetail] = useState<Food | null>(null);
-  
-  const {
-    searchQuery,
-    selectedCategories,
-    selectedFoodTypes,
-    selectedAllergens,
-    selectedRecipes,
-    selectedFoods,
-    setSearchQuery,
-    setSelectedCategories,
-    setSelectedFoodTypes,
-    setSelectedAllergens,
-    clearFilters,
-    addRecipe,
-    deleteRecipe,
-    toggleRecipeSelection,
-    clearRecipeSelection,
-    addFood,
-    deleteFood,
-    toggleFoodSelection,
-    clearFoodSelection,
-    getFilteredRecipes,
-    getFilteredFoods
-  } = useRecipeStore();
+export const RecipesScreen: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<TabType>('recipes');
 
-  const filteredRecipes = getFilteredRecipes();
-  const filteredFoods = getFilteredFoods();
-
-  const handleAddNew = () => {
-    if (activeTab === 'Recipes') {
-      const newRecipe: Recipe = {
-        id: Date.now().toString(),
-        name: 'New Recipe',
-        categories: [],
-        foodTypes: [],
-        allergens: [],
-        prepTime: '0',
-        cookTime: '0',
-        protein: '0',
-        carbs: '0',
-        fat: '0',
-        calories: '0',
-        instructions: '',
-        ingredients: [],
-        image: 'https://via.placeholder.com/150',
-      };
-      addRecipe(newRecipe);
-    } else {
-      const newFood: Food = {
-        id: Date.now().toString(),
-        name: 'New Food',
-        protein: '0',
-        carbs: '0',
-        fat: '0',
-        calories: '0',
-        image: 'https://via.placeholder.com/150',
-      };
-      addFood(newFood);
-    }
-  };
-
-  const handleDeleteSelected = () => {
-    const selectedCount = activeTab === 'Recipes' ? selectedRecipes.length : selectedFoods.length;
-    
-    if (selectedCount === 0) return;
-    
-    Alert.alert(
-      `Delete ${activeTab}`,
-      `Are you sure you want to delete ${selectedCount} selected ${activeTab.toLowerCase()}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: () => {
-            if (activeTab === 'Recipes') {
-              selectedRecipes.forEach(id => deleteRecipe(id));
-              clearRecipeSelection();
-            } else {
-              selectedFoods.forEach(id => deleteFood(id));
-              clearFoodSelection();
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const handleRecipePress = (recipe: Recipe) => {
-    if (selectedRecipes.length > 0) {
-      toggleRecipeSelection(recipe.id);
-    } else {
-      // Show recipe detail screen
-      setSelectedRecipeForDetail(recipe);
-      setViewMode('recipeDetail');
-    }
-  };
-
-  const handleFoodPress = (food: Food) => {
-    if (selectedFoods.length > 0) {
-      toggleFoodSelection(food.id);
-    } else {
-      // Show food detail screen
-      setSelectedFoodForDetail(food);
-      setViewMode('foodDetail');
-    }
-  };
-
-  const handleBackToList = () => {
-    setViewMode('list');
-    setSelectedRecipeForDetail(null);
-    setSelectedFoodForDetail(null);
-  };
-
-  const handleTabChange = (tab: ActiveTab) => {
-    setActiveTab(tab);
-    // Clear selections when switching tabs
-    clearRecipeSelection();
-    clearFoodSelection();
-  };
-
-  const handleApplyFilters = (filters: {
-    categories: string[];
-    foodTypes: string[];
-    allergens: string[];
-  }) => {
-    setSelectedCategories(filters.categories);
-    setSelectedFoodTypes(filters.foodTypes);
-    setSelectedAllergens(filters.allergens);
-  };
-
-  const hasActiveFilters = selectedCategories.length > 0 || selectedFoodTypes.length > 0 || selectedAllergens.length > 0;
-  const hasSelections = (activeTab === 'Recipes' ? selectedRecipes.length : selectedFoods.length) > 0;
-
-  const renderRecipeItem = ({ item }: { item: Recipe }) => (
-    <RecipeCard
-      recipe={item}
-      isSelected={selectedRecipes.includes(item.id)}
-      onPress={() => handleRecipePress(item)}
-      onLongPress={() => toggleRecipeSelection(item.id)}
-    />
+  const renderTabButton = (tabType: TabType, label: string, icon: string) => (
+    <TouchableOpacity
+      style={[
+        styles.tabButton,
+        activeTab === tabType && styles.activeTabButton
+      ]}
+      onPress={() => setActiveTab(tabType)}
+    >
+      <Text style={styles.tabIcon}>{icon}</Text>
+      <Text style={[
+        styles.tabLabel,
+        activeTab === tabType && styles.activeTabLabel
+      ]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 
-  const renderFoodItem = ({ item }: { item: Food }) => (
-    <FoodCard
-      food={item}
-      isSelected={selectedFoods.includes(item.id)}
-      onPress={() => handleFoodPress(item)}
-      onLongPress={() => toggleFoodSelection(item.id)}
-    />
-  );
-
-  // Show detail screens when in detail mode
-  if (viewMode === 'recipeDetail' && selectedRecipeForDetail) {
-    return (
-      <RecipeDetailScreen
-        recipe={selectedRecipeForDetail}
-        onBack={handleBackToList}
-      />
-    );
-  }
-
-  if (viewMode === 'foodDetail' && selectedFoodForDetail) {
-    return (
-      <FoodDetailScreen
-        food={selectedFoodForDetail}
-        onBack={handleBackToList}
-      />
-    );
-  }
-
-  // Main list view
-  return (
-    <View style={styles.container}>
-      {/* Status bar separator */}
-      <View style={[styles.statusBarSeparator, { paddingTop: insets.top }]} />
-      
-      {/* Top Header with Tab Navigation */}
-      <View style={styles.header}>
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'Recipes' && styles.activeTab]}
-            onPress={() => handleTabChange('Recipes')}
-          >
-            <Text style={[styles.tabText, activeTab === 'Recipes' && styles.activeTabText]}>
-              Recipes
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.tabSeparator}>|</Text>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'Foods' && styles.activeTab]}
-            onPress={() => handleTabChange('Foods')}
-          >
-            <Text style={[styles.tabText, activeTab === 'Foods' && styles.activeTabText]}>
-              Foods
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Search and Filter Row */}
-      <View style={styles.searchFilterContainer}>
-        <View style={styles.searchContainer}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder={`Search ${activeTab.toLowerCase()}...`}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          <TouchableOpacity 
-            style={[styles.filterIconButton, hasActiveFilters && styles.activeFilterIconButton]}
-            onPress={() => setIsFilterModalVisible(true)}
-          >
-            <Text style={[styles.filterIconText, hasActiveFilters && styles.activeFilterIconText]}>
-              ⩪
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Action Buttons Row */}
-      <View style={styles.actionButtonsContainer}>
-        <View style={styles.leftActions}>
-          <TouchableOpacity 
-            style={[styles.deleteButton, { opacity: hasSelections ? 1 : 0.3 }]} 
-            onPress={handleDeleteSelected}
-            disabled={!hasSelections}
-          >
-            <Text style={styles.deleteIcon}>✕</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.addButton} onPress={handleAddNew}>
-            <Text style={styles.addIcon}>+</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.rightActions}>
-          <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
-            <Text style={styles.clearFiltersText}>Clear Filter</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Content List */}
-      <View style={styles.content}>
-        <Text style={styles.sectionHeader}>
-          {activeTab} ({activeTab === 'Recipes' ? filteredRecipes.length : filteredFoods.length})
+  const renderRecipesTab = () => (
+    <ScrollView style={styles.recipesContainer} contentContainerStyle={styles.recipesContent}>
+      <View style={styles.placeholderContainer}>
+        <Text style={styles.placeholderIcon}>📚</Text>
+        <Text style={styles.placeholderTitle}>Recipe Collection</Text>
+        <Text style={styles.placeholderText}>
+          Discover and save your favorite recipes
         </Text>
-        
-        {activeTab === 'Recipes' ? (
-          <FlatList
-            data={filteredRecipes}
-            renderItem={renderRecipeItem}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContent}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>No recipes found</Text>
-                <Text style={styles.emptyStateSubtext}>
-                  {searchQuery || hasActiveFilters ? 'Try adjusting your search or filters' : 'Add your first recipe to get started'}
-                </Text>
-              </View>
-            }
-          />
-        ) : (
-          <FlatList
-            data={filteredFoods}
-            renderItem={renderFoodItem}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContent}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>No foods found</Text>
-                <Text style={styles.emptyStateSubtext}>
-                  {searchQuery ? 'Try adjusting your search' : 'Add your first food item to get started'}
-                </Text>
-              </View>
-            }
-          />
-        )}
+        <Text style={styles.placeholderSubtext}>
+          (Recipe functionality coming soon)
+        </Text>
       </View>
 
-      {/* Filter Modal */}
-      <FilterModal
-        visible={isFilterModalVisible}
-        onClose={() => setIsFilterModalVisible(false)}
-        onApply={handleApplyFilters}
-        initialCategories={selectedCategories}
-        initialFoodTypes={selectedFoodTypes}
-        initialAllergens={selectedAllergens}
-      />
-    </View>
+      {/* Placeholder recipe cards */}
+      {[1, 2, 3].map((i) => (
+        <View key={i} style={styles.recipeCard}>
+          <View style={styles.recipeImage}>
+            <Text style={styles.recipeImageText}>🍳</Text>
+          </View>
+          <View style={styles.recipeContent}>
+            <Text style={styles.recipeTitle}>Sample Recipe {i}</Text>
+            <Text style={styles.recipeDescription}>
+              A delicious recipe that will be available once we implement the recipe system
+            </Text>
+            <View style={styles.recipeStats}>
+              <Text style={styles.recipeStat}>⏱️ 30 min</Text>
+              <Text style={styles.recipeStat}>👥 4 servings</Text>
+              <Text style={styles.recipeStat}>🔥 Easy</Text>
+            </View>
+          </View>
+        </View>
+      ))}
+    </ScrollView>
+  );
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'recipes':
+        return renderRecipesTab();
+      case 'ingredients':
+        return <IngredientsTab />;
+      case 'foods':
+        return <FoodsAndDrinksTab />;
+      default:
+        return renderRecipesTab();
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Recipes & Food Database</Text>
+        <Text style={styles.subtitle}>
+          Find recipes, ingredients, and food products
+        </Text>
+      </View>
+
+      <View style={styles.tabContainer}>
+        {renderTabButton('recipes', 'Recipes', '📚')}
+        {renderTabButton('ingredients', 'Ingredients', '🥕')}
+        {renderTabButton('foods', 'Foods & Drinks', '🍽️')}
+      </View>
+
+      <View style={styles.content}>
+        {renderContent()}
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
-  statusBarSeparator: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    backgroundColor: '#F9FAFB',
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderBottomColor: '#E5E7EB',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#6B7280',
   },
   tabContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tab: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  activeTab: {
-    backgroundColor: '#FFB347',
-    borderRadius: 5,
-  },
-  tabText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333333',
-  },
-  activeTabText: {
-    color: '#FFFFFF',
-  },
-  tabSeparator: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginHorizontal: 10,
-    color: '#333333',
-  },
-  searchFilterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 15,
-    paddingVertical: 15,
     backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0F0F0',
-    borderRadius: 25,
-    paddingHorizontal: 15,
-    height: 50,
-  },
-  searchIcon: {
-    fontSize: 16,
-    marginRight: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333333',
-  },
-  filterIconButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderRadius: 15,
-    backgroundColor: 'transparent',
-  },
-  activeFilterIconButton: {
-    backgroundColor: '#FFB347',
-  },
-  filterIconText: {
-    fontSize: 16,
-    color: '#666666',
-  },
-  activeFilterIconText: {
-    color: '#FFFFFF',
-  },
-  actionButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  leftActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  clearFiltersButton: {
-    backgroundColor: '#FFB347',
-    paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 5,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
-  clearFiltersText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  rightActions: {
-    alignItems: 'flex-end',
-  },
-  addButton: {
-    backgroundColor: '#FFB347',
-    borderRadius: 16,
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
+  tabButton: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  addIcon: {
-    fontSize: 20,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  deleteButton: {
-    backgroundColor: '#FF6B6B',
-    borderRadius: 16,
-    width: 32,
-    height: 32,
     justifyContent: 'center',
-    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginHorizontal: 4,
   },
-  deleteIcon: {
+  activeTabButton: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  tabIcon: {
     fontSize: 18,
-    color: '#FFFFFF',
-    fontWeight: '900',
-    lineHeight: 18,
-    textAlign: 'center',
+    marginRight: 8,
+  },
+  tabLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  activeTabLabel: {
+    color: '#4338CA',
   },
   content: {
     flex: 1,
-    paddingTop: 10,
   },
-  sectionHeader: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333333',
-    paddingHorizontal: 15,
-    marginBottom: 15,
-  },
-  listContent: {
-    paddingBottom: 20,
-  },
-  emptyState: {
+  // Recipes tab styles
+  recipesContainer: {
     flex: 1,
-    justifyContent: 'center',
+  },
+  recipesContent: {
+    padding: 16,
+  },
+  placeholderContainer: {
     alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 60,
+    paddingVertical: 32,
+    marginBottom: 24,
   },
-  emptyStateText: {
+  placeholderIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  placeholderTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#666666',
-    marginBottom: 10,
-    textAlign: 'center',
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
   },
-  emptyStateSubtext: {
+  placeholderText: {
     fontSize: 16,
-    color: '#999999',
+    color: '#6B7280',
     textAlign: 'center',
-    lineHeight: 22,
+    marginBottom: 4,
+  },
+  placeholderSubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+  },
+  recipeCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  recipeImage: {
+    height: 120,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recipeImageText: {
+    fontSize: 48,
+  },
+  recipeContent: {
+    padding: 16,
+  },
+  recipeTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  recipeDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  recipeStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  recipeStat: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
 });
